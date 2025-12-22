@@ -1,157 +1,214 @@
 import { createClient } from '@/lib/supabase/server';
-import { bookingSchema } from '@/components/booking/schema';
+import { bookingSchema } from '@/components/features/booking/schema';
+import { sendBookingConfirmationLine } from '@/lib/line/notifications';
+import { syncBookingToGoogleCalendar } from '@/lib/google/sync';
+import { getPlanAccess } from '@/lib/plan/access';
+import { AmberErrors, errorResponse } from '@/lib/errors';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
+
+// ... imports remain same ...
+
+// Define extended schema to include cartItems
+const cartItemSchema = z.object({
+    serviceId: z.string(),
+    quantity: z.number().min(1),
+    selectedOptions: z.array(z.string()).optional()
+});
+
+const apiBookingSchema = bookingSchema.extend({
+    date: z.coerce.date(),
+    cartItems: z.array(cartItemSchema).optional(), // Optional for legacy? No, make required for new flow
+});
 
 export async function POST(request: Request) {
     try {
         const supabase = await createClient();
         const body = await request.json();
 
-        // specific schema for API that handles string -> Date coercion
-        const apiBookingSchema = bookingSchema.extend({
-            date: z.coerce.date(),
-        });
-
         // Validate input data
         const validatedData = apiBookingSchema.parse(body);
+        const { cartItems } = validatedData;
 
-        // Get current user (if logged in) for customer_id
-        const { data: { user } } = await supabase.auth.getUser();
+        if (!cartItems || cartItems.length === 0) {
+            return errorResponse(AmberErrors.VALIDATION_ERROR('カートにサービスが入っていません。'));
+        }
 
-        // TODO: Retrieve store_id and service details dynamically.
-        // For MVP, we might need to look up the service to get the store_id and duration.
-        // 1. Get Store ID
-        const { data: storeData, error: storeError } = await supabase
+        // 1. Get Store ID from Slug
+        const slug = (body as any).slug; // Extract slug from payload
+        if (!slug) return errorResponse(AmberErrors.VALIDATION_ERROR('店舗情報が指定されていません。'));
+
+        // Use RPC or direct select if RPC not available (for MVP select is fine if RLS allows or we use admin client)
+        const { data: store, error: storeError } = await supabase
             .from('stores')
-            .select('id')
-            .limit(1)
+            .select('id, organization_id')
+            .eq('slug', slug)
             .single();
 
-        if (storeError || !storeData) {
-            return NextResponse.json({ error: 'Store not found' }, { status: 500 });
-        }
-        const storeId = storeData.id;
+        if (storeError || !store) return errorResponse(AmberErrors.NOT_FOUND('店舗'));
+        const storeId = store.id;
+        const orgId = store.organization_id;
 
-        // 2. Staff Auto-Assignment
-        const { data: staffList } = await supabase
-            .from('staff')
-            .select('*')
-            .eq('is_active', true)
+        // 2. Service Area Validation
+        const { data: areas } = await supabase
+            .from('service_areas')
+            .select('prefecture, city')
             .eq('store_id', storeId);
 
-        if (!staffList || staffList.length === 0) {
-            // Fallback if no staff in DB yet (for testing)
-            console.warn('No staff found. Proceeding without staff assignment.');
-        }
-
-        // Mock Round Robin or Random assignment
-        const assignedStaff = staffList && staffList.length > 0
-            ? staffList[Math.floor(Math.random() * staffList.length)]
-            : null;
-
-        // 2. Customer Lookup or Creation (Guest Booking)
-        // Check if customer exists by phone
-        let customerId: string | null = null;
-
-        // For Phase 0, we treat phone as unique identifier
-        const { data: existingCustomer } = await supabase
-            .from('customers')
-            .select('id')
-            .eq('phone', validatedData.customerPhone!) // Phone is mandatory for guest
-            .single();
-
-        if (existingCustomer) {
-            customerId = existingCustomer.id;
-        } else {
-            // Create new customer
-            const { data: newCustomer, error: createError } = await supabase
-                .from('customers')
-                .insert({
-                    name: validatedData.customerName,
-                    phone: validatedData.customerPhone!,
-                    store_id: storeId, // TODO: fix
-                    notes: validatedData.customerAddress, // Initial notes from address? OR use address field
-                    address: validatedData.customerAddress
-                })
-                .select()
-                .single();
-
-            if (createError) {
-                console.error('Customer Creation Error:', createError);
-                return NextResponse.json({ error: 'Failed to create customer record' }, { status: 500 });
+        if (areas && areas.length > 0) {
+            const address = validatedData.customerAddress;
+            const isCovered = areas.some(area => address.includes(area.prefecture) && address.includes(area.city));
+            if (!isCovered) {
+                return NextResponse.json({ error: 'Selected address is out of service area.' }, { status: 400 });
             }
-            customerId = newCustomer.id;
         }
 
-        // We need to fetch service details to calculate end_time and get store_id
-        const { data: service, error: serviceError } = await supabase
-            .from('services')
-            .select('*')
-            .eq('id', validatedData.serviceId)
-            .single();
+        // 3. Calculate Totals (Duration & Price) from DB
+        // Fetch all involved services & options to be safe (trust DB, not client)
+        // IDs:
+        const serviceIds = cartItems.map(i => i.serviceId);
+        const optionIds = cartItems.flatMap(i => i.selectedOptions || []);
 
-        if (serviceError || !service) {
-            return NextResponse.json({ error: 'Service not found' }, { status: 400 });
+        // Parallel Fetch
+        const [servicesRes, optionsRes] = await Promise.all([
+            supabase.from('services').select('*').in('id', serviceIds),
+            // Assuming we have service_options table. 
+            // If not created yet in dev env, this will fail. 
+            // We MUST assume migration `20241217_phase3_cart_system` is applied.
+            optionIds.length > 0 ? supabase.from('service_options').select('*').in('id', optionIds) : Promise.resolve({ data: [] })
+        ]);
+
+        const dbServices = servicesRes.data || [];
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const dbOptions = (optionsRes as any).data || [];
+
+        let totalDurationMinutes = 0;
+        let totalAmount = 0;
+        const travelPadding = 30; // One travel padding per booking event
+
+        // Calculation Loop
+        for (const item of cartItems) {
+            const service = dbServices.find(s => s.id === item.serviceId);
+            if (!service) throw new Error(`Service ${item.serviceId} not found`);
+
+            // Service Duration
+            const serviceDuration = item.quantity * service.duration_minutes; // e.g. 2 ACs = 2 x 60m? Yes.
+            // Service Buffer (Once per service type? Or per unit? Usually per unit for cleaning)
+            const buffer = item.quantity * (service.buffer_minutes || 0);
+
+            // Service Price
+            const itemPrice = item.quantity * service.price;
+
+            // Options
+            let optionsDuration = 0;
+            let optionsPrice = 0;
+            if (item.selectedOptions) {
+                for (const optId of item.selectedOptions) {
+                    const opt = dbOptions.find((o: any) => o.id === optId);
+                    if (opt) {
+                        // Options apply to ALL units in this item line? 
+                        // Our UI assumes `selectedOptions` is per line item (quantity).
+                        // e.g. 2 ACs -> select Coating -> 2 Coatings involved.
+                        // So price is quantity * option_price
+                        optionsPrice += item.quantity * opt.price;
+                        optionsDuration += item.quantity * opt.duration_minutes; // Using Snake Case in DB potentially? Check migration. 
+                        // Migration said `duration_minutes integer`.
+                    }
+                }
+            }
+
+            totalDurationMinutes += serviceDuration + buffer + optionsDuration;
+            totalAmount += itemPrice + optionsPrice;
         }
 
-        const endTime = new Date(validatedData.date.getTime() + service.duration_minutes * 60000);
+        totalDurationMinutes += travelPadding; // Add travel once at end
 
-        // 3. Insert Booking (Confirmed immediately)
-        const { data, error } = await supabase
+        // 4. Calculate Times
+        const startTime = validatedData.date;
+        const endTime = new Date(startTime.getTime() + totalDurationMinutes * 60000);
+
+        // 5. Staff Assignment
+        const dayOfWeek = startTime.getDay();
+        const { data: candidates } = await supabase
+            .from('staff_schedules')
+            .select('staff_id')
+            .eq('day_of_week', dayOfWeek);
+
+        // Simple assignment fallback
+        let assignedStaffId: string | null = null;
+        if (candidates && candidates.length > 0) {
+            const shuffled = candidates.sort(() => 0.5 - Math.random());
+            assignedStaffId = shuffled[0].staff_id;
+        } else {
+            const { data: anyStaff } = await supabase.from('staff').select('id').eq('is_active', true).limit(1);
+            if (anyStaff) assignedStaffId = anyStaff[0].id;
+        }
+
+        // NOTE: Customer creation is now handled by the RPC (create_booking_secure)
+        // The RPC performs upsert based on phone number within the store context
+        // This eliminates duplicate logic and ensures consistency
+
+        // ... (validation logic remains) ...
+
+        // 7. Call Secure RPC
+        // We pass the validated data to the Postgres Function.
+        // The Function runs with Security Definer, allowing it to Insert even if Anon RLS is strict.
+
+        // Construct Payload for RPC
+        const rpcPayload = {
+            slug_input: slug,
+            customer_name: validatedData.customerName,
+            customer_phone: validatedData.customerPhone,
+            customer_email: validatedData.customerEmail || '',
+            customer_address: validatedData.customerAddress,
+            booking_date: validatedData.date.toISOString(),
+            cart_items: cartItems.map(item => ({
+                serviceId: item.serviceId,
+                quantity: item.quantity,
+                options: item.selectedOptions || []
+            }))
+        };
+
+        const { data: rpcResult, error: rpcError } = await supabase.rpc('create_booking_secure', rpcPayload);
+
+        if (rpcError) {
+            console.error('RPC Error:', rpcError);
+            throw rpcError;
+        }
+
+        const bookingId = (rpcResult as any).bookingId;
+
+        // Update payment method & get full info for notification
+        const { data: booking } = await supabase
             .from('bookings')
-            .insert({
-                store_id: storeId,
-                customer_id: customerId,
-                staff_id: assignedStaff?.id || null,
-                service_id: validatedData.serviceId,
-                start_time: validatedData.date.toISOString(), // Start Time
-                end_time: endTime.toISOString(),
-                status: 'confirmed', // Phase 0: Immediate confirmation
-                notes: validatedData.notes,
-                // customer_name/email/phone fields in bookings table are redundant if we have customers table, 
-                // but good for snapshot. schema might have changed?
-                // logical: use customers table relation.
-            })
-            .select()
+            .update({ payment_method: validatedData.paymentMethod })
+            .eq('id', bookingId)
+            .select('*, customers(*), booking_items(*, services(*))')
             .single();
 
-        if (error) {
-            console.error('Database Error:', error);
-            return NextResponse.json({ error: error.message }, { status: 500 });
+        // Plan Guard: Check Feature Access (LINE & Google Calendar)
+        const planAccess = await getPlanAccess(orgId);
+
+        // If on_site, send LINE notification immediately (Growth+ only)
+        if (validatedData.paymentMethod === 'on_site' && booking?.customers?.line_user_id && planAccess.canUseLine) {
+            await sendBookingConfirmationLine(booking.customers.line_user_id, booking);
         }
 
-        // Send LINE Notification if customer_id looks like a LINE user ID (Supabase Auth usually uses UUID, 
-        // but if we link LINE, we need to store the provider token or LINE User ID somewhere.
-        // However, Supabase Auth User ID != LINE User ID. 
-        // We need to fetch the LINE User ID from `identities` table or `user_metadata` if stored.
-        // For now, assuming user.user_metadata might contain 'sub' or similar if using LINE provider properly.
-        // BUT, standard Supabase Auth doesn't expose LINE User ID easily in session without custom mapping.
-        // We will attempt to send if we have a way. 
-        // Actually, let's look at user metadata. provider_id is usually there.
-        // For MVP, if we can't find it, we skip.
-
-        // NOTE: This assumes we can get LINE User ID. 
-        // If Supabase handles it, `user.identities` has `id` which is the LINE User ID.
-        const identities = user?.identities;
-        const lineIdentity = identities?.find(id => id.provider === 'line');
-
-        if (lineIdentity && lineIdentity.id) {
-            const { sendLineMessage } = await import('@/lib/line/messaging');
-            const formattedDate = new Date(validatedData.date).toLocaleDateString('ja-JP');
-            const message = `予約が確定しました。\n\n日時: ${formattedDate} ${validatedData.timeSlot}\nサービス: ${validatedData.serviceId}\n\nご来店をお待ちしております。`;
-
-            await sendLineMessage(lineIdentity.id, [{ type: 'text', text: message }]);
+        // Also Sync to Google Calendar (Growth+ only)
+        if (booking?.staff_id && planAccess.canUseGoogleCalendar) {
+            const { data: staff } = await supabase.from('staff').select('*').eq('id', booking.staff_id).single();
+            if (staff?.google_refresh_token) {
+                const googleEventId = await syncBookingToGoogleCalendar(staff, booking);
+                if (googleEventId) {
+                    await supabase.from('bookings').update({ google_event_id: googleEventId }).eq('id', bookingId);
+                }
+            }
         }
 
-        return NextResponse.json({ success: true, booking: data });
+        return NextResponse.json(rpcResult);
 
-    } catch (error) {
-        if (error instanceof z.ZodError) {
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            return NextResponse.json({ error: 'Validation failed', details: (error as any).errors }, { status: 400 });
-        }
-        console.error('Request Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    } catch (error: any) {
+        console.error('Booking API Error:', error);
+        return NextResponse.json({ error: error.message || 'Internal Error' }, { status: 500 });
     }
 }

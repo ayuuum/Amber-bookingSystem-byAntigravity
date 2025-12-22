@@ -4,58 +4,42 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { bookingSchema, BookingFormData } from "./schema";
-import { ServiceSelection } from "./steps/ServiceSelection";
+import { ServiceCart } from "./steps/ServiceCart";
 import { DateSelection } from "./steps/DateSelection";
 import { CustomerInfo } from "./steps/CustomerInfo";
-import { Confirmation } from "./steps/Confirmation";
+import { BookingProgress } from "./BookingProgress";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
-// import { useToast } from "@/hooks/use-toast";
+import { CartItem } from "@/types/cart";
 
-export function BookingWizard() {
-    const [step, setStep] = useState(1);
+interface BookingWizardProps {
+    slug: string;
+}
+
+export function BookingWizard({ slug }: BookingWizardProps) {
+    const [cart, setCart] = useState<CartItem[]>([]);
+
     const form = useForm<BookingFormData>({
         resolver: zodResolver(bookingSchema),
         defaultValues: {
-            serviceId: "",
+            serviceId: "", // Logic handled in ServiceCart to sync this
             notes: "",
         },
         mode: "onChange",
     });
 
-    // Mock toast or simple alert if missing
-    const { } = form;
-
-    const nextStep = async () => {
-        let valid = false;
-        if (step === 1) {
-            valid = await form.trigger("serviceId");
-        } else if (step === 2) {
-            valid = await form.trigger(["date", "timeSlot"]);
-        } else if (step === 3) {
-            valid = await form.trigger(["customerName", "customerEmail", "customerPhone", "customerAddress"]);
-        } else if (step === 4) {
-            valid = true;
-        }
-
-        if (valid) {
-            setStep((s) => s + 1);
-            window.scrollTo(0, 0);
-        }
-    };
-
-    const prevStep = () => {
-        setStep((s) => s - 1);
-        window.scrollTo(0, 0);
-    };
-
     const onSubmit = async (data: BookingFormData) => {
         try {
-            // Format date to YYYY-MM-DD to ensure consistent date handling across timezones
-            // We create a new object to avoid mutating the original data if needed
+            if (cart.length === 0) {
+                alert("サービスを選択してください");
+                return;
+            }
+
             const payload = {
                 ...data,
-                date: data.date.toISOString().split('T')[0], // or use format(date, 'yyyy-MM-dd') if date-fns available
+                date: data.date.toISOString().split('T')[0],
+                cartItems: cart,
+                slug: slug // Pass slug to resolve store
             };
 
             const response = await fetch('/api/bookings', {
@@ -71,7 +55,6 @@ export function BookingWizard() {
             }
 
             alert("予約が完了しました！");
-            // Redirect to home or success page
             window.location.href = '/';
         } catch (error) {
             console.error("Booking Error:", error);
@@ -80,55 +63,59 @@ export function BookingWizard() {
         }
     };
 
+    // Calculate current step based on form state
+    const currentStep = cart.length > 0
+        ? (form.watch("date") ? (form.watch("lastName") ? 2 : 1) : 0)
+        : 0;
+
     return (
-        <div className="space-y-8">
-            {/* Progress Indicator */}
-            <div className="flex justify-between mb-8 max-w-sm mx-auto">
-                {[1, 2, 3, 4].map((s) => (
-                    <div
-                        key={s}
-                        className={`flex items-center justify-center w-8 h-8 rounded-full border-2 ${step >= s
-                            ? "border-primary bg-primary text-primary-foreground"
-                            : "border-input text-muted-foreground"
-                            }`}
-                    >
-                        {s}
+        <div className="space-y-8 max-w-3xl mx-auto">
+            <h1 className="text-2xl font-bold text-center">サービス予約</h1>
+
+            {/* Progress Bar */}
+            <BookingProgress currentStep={currentStep} />
+
+            <Form {...form}>
+                <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
+
+                    {/* Section 1: Service Cart */}
+                    <ServiceCart
+                        slug={slug}
+                        cart={cart}
+                        onUpdateCart={setCart}
+                        error={form.formState.errors.serviceId?.message}
+                    />
+
+                    {/* Section 2: Date */}
+                    {/* Note: DateSelection needs update to calculate duration from CART, not serviceId */}
+                    <div className="bg-white p-6 rounded-lg shadow-sm border">
+                        <DateSelection form={form} />
                     </div>
-                ))}
-            </div>
 
-            <div className="min-h-[400px]">
-                <Form {...form}>
-                    <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-8">
-                        {step === 1 && <ServiceSelection form={form} />}
-                        {step === 2 && <DateSelection form={form} />}
-                        {step === 3 && <CustomerInfo form={form} />}
-                        {step === 4 && <Confirmation form={form} />}
+                    {/* Section 3: Customer Info */}
+                    <div className="bg-white p-6 rounded-lg shadow-sm border">
+                        <CustomerInfo form={form} />
+                    </div>
 
-                        <div className="flex justify-between pt-8 border-t">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                onClick={prevStep}
-                                disabled={step === 1}
-                                className={step === 1 ? "invisible" : ""}
-                            >
-                                戻る
+                    {/* Submit Area */}
+                    <div className="bg-gradient-to-br from-amber-50 to-white p-8 rounded-xl border border-amber-100 shadow-sm">
+                        <div className="flex flex-col items-center space-y-4">
+                            <div className="inline-flex items-center gap-2 bg-white px-4 py-2 rounded-full shadow-sm border border-gray-100">
+                                <svg className="h-4 w-4 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                                </svg>
+                                <span className="text-sm text-gray-600">入力内容は暗号化されて送信されます</span>
+                            </div>
+                            <Button type="submit" size="lg" className="w-full max-w-md font-bold text-lg h-14 shadow-md hover:shadow-lg transition-shadow">
+                                予約を確定する
                             </Button>
-
-                            {step < 4 ? (
-                                <Button type="button" onClick={nextStep}>
-                                    次へ
-                                </Button>
-                            ) : (
-                                <Button type="submit">
-                                    予約を確定する
-                                </Button>
-                            )}
+                            <p className="text-xs text-muted-foreground text-center">
+                                確定後、LINEまたはメールで予約確認のご連絡をいたします
+                            </p>
                         </div>
-                    </form>
-                </Form>
-            </div>
+                    </div>
+                </form>
+            </Form>
         </div>
     );
 }

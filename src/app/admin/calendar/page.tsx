@@ -2,17 +2,73 @@
 
 import { Calendar } from "@/components/ui/calendar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { createClient } from "@/lib/supabase/client";
+import { format, isSameDay } from "date-fns";
+import { ja } from "date-fns/locale";
+
+type Booking = {
+    id: string;
+    start_time: string;
+    end_time: string;
+    status: string;
+    customers: { name: string } | null;
+    staff: { name: string } | null;
+    booking_items: {
+        services: { name: string } | null;
+    }[];
+};
 
 export default function CalendarPage() {
     const [date, setDate] = useState<Date | undefined>(new Date());
+    const [bookings, setBookings] = useState<Booking[]>([]);
+    const [loading, setLoading] = useState(true);
+    const supabase = createClient();
 
-    // Mock checking dates with bookings
-    const bookings = [
-        new Date(2024, 11, 15), // Dec 15
-        new Date(2024, 11, 16),
-        new Date(2024, 11, 20),
-    ];
+    useEffect(() => {
+        const fetchBookings = async () => {
+            setLoading(true);
+            const { data, error } = await supabase
+                .from('bookings')
+                .select(`
+                    id,
+                    start_time,
+                    end_time,
+                    status,
+                    customers ( name ),
+                    staff ( name ),
+                    booking_items (
+                        services ( name )
+                    )
+                `)
+                .neq('status', 'cancelled');
+
+            if (data) {
+                // Transform data if needed, or keep as is.
+                // Supabase returns arrays for relations, we might need to flatten or handle in render.
+                const formatted = data.map((b: any) => ({
+                    ...b,
+                    customers: Array.isArray(b.customers) ? b.customers[0] : b.customers,
+                    staff: Array.isArray(b.staff) ? b.staff[0] : b.staff,
+                }));
+                setBookings(formatted);
+            }
+            setLoading(false);
+        };
+
+        fetchBookings();
+    }, [supabase]);
+
+    // Create array of Dates for the calendar modifier
+    const bookedDates = bookings.map(b => new Date(b.start_time));
+
+    // Filter bookings for the selected date
+    const selectedDateBookings = date
+        ? bookings.filter(b => isSameDay(new Date(b.start_time), date))
+        : [];
+
+    // Sort by time
+    selectedDateBookings.sort((a, b) => new Date(a.start_time).getTime() - new Date(b.start_time).getTime());
 
     return (
         <div className="p-8 space-y-8">
@@ -33,7 +89,7 @@ export default function CalendarPage() {
                             onSelect={setDate}
                             className="rounded-md border"
                             modifiers={{
-                                booked: bookings
+                                booked: bookedDates
                             }}
                             modifiersStyles={{
                                 booked: { fontWeight: 'bold', textDecoration: 'underline', color: 'var(--primary)' }
@@ -48,16 +104,28 @@ export default function CalendarPage() {
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-4">
-                            {/* Mock Logic */}
-                            {date && bookings.some(b => b.getDate() === date.getDate() && b.getMonth() === date.getMonth()) ? (
-                                <div className="p-4 border rounded-lg bg-slate-50">
-                                    <div className="flex justify-between items-center mb-2">
-                                        <span className="font-bold text-lg">09:00 - 11:00</span>
-                                        <span className="bg-green-100 text-green-800 text-xs px-2 py-1 rounded">確定済み</span>
+                            {loading ? (
+                                <p>Loading...</p>
+                            ) : selectedDateBookings.length > 0 ? (
+                                selectedDateBookings.map(booking => (
+                                    <div key={booking.id} className="p-4 border rounded-lg bg-slate-50">
+                                        <div className="flex justify-between items-center mb-2">
+                                            <span className="font-bold text-lg">
+                                                {format(new Date(booking.start_time), 'HH:mm')} - {format(new Date(booking.end_time), 'HH:mm')}
+                                            </span>
+                                            <span className={`text-xs px-2 py-1 rounded ${booking.status === 'confirmed' ? 'bg-green-100 text-green-800' :
+                                                    booking.status === 'pending' ? 'bg-yellow-100 text-yellow-800' : 'bg-gray-100'
+                                                }`}>
+                                                {booking.status === 'confirmed' ? '確定済み' : booking.status === 'pending' ? '承認待ち' : booking.status}
+                                            </span>
+                                        </div>
+                                        <p className="font-medium">{booking.customers?.name || '顧客名なし'}</p>
+                                        <p className="text-sm text-gray-500">
+                                            担当: {booking.staff?.name || '未定'} /
+                                            内容: {booking.booking_items.map(i => i.services?.name).join(', ') || '詳細なし'}
+                                        </p>
                                     </div>
-                                    <p className="font-medium">田中 恵子</p>
-                                    <p className="text-sm text-gray-500">エアコンクリーニング</p>
-                                </div>
+                                ))
                             ) : (
                                 <p className="text-gray-500 italic">この日の予約はありません。</p>
                             )}
@@ -68,3 +136,4 @@ export default function CalendarPage() {
         </div>
     );
 }
+

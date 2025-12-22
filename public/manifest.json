@@ -1,0 +1,21 @@
+{
+    "name": "Amber - Home Service Booking",
+    "short_name": "Amber",
+    "description": "Professional cleaning and home services booking platform.",
+    "start_url": "/admin",
+    "display": "standalone",
+    "background_color": "#ffffff",
+    "theme_color": "#d97706",
+    "icons": [
+        {
+            "src": "/icons/icon-192x192.png",
+            "sizes": "192x192",
+            "type": "image/png"
+        },
+        {
+            "src": "/icons/icon-512x512.png",
+            "sizes": "512x512",
+            "type": "image/png"
+        }
+    ]
+}

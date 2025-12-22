@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { LayoutDashboard, Calendar, Users, Settings, LogOut } from "lucide-react";
+import { LayoutDashboard, Calendar, Users, Settings, LogOut, Building } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 export default function AdminLayout({
@@ -31,6 +31,39 @@ export default function AdminLayout({
                         <Button variant="ghost" className="w-full justify-start gap-2">
                             <Users className="h-4 w-4" />
                             Bookings
+                        </Button>
+                    </Link>
+                    <Link href="/admin/analytics">
+                        <Button variant="ghost" className="w-full justify-start gap-2">
+                            <svg
+                                xmlns="http://www.w3.org/2000/svg"
+                                width="24"
+                                height="24"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="2"
+                                strokeLinecap="round"
+                                strokeLinejoin="round"
+                                className="h-4 w-4"
+                            >
+                                <line x1="12" x2="12" y1="20" y2="10" />
+                                <line x1="18" x2="18" y1="20" y2="4" />
+                                <line x1="6" x2="6" y1="20" y2="16" />
+                            </svg>
+                            Analytics
+                        </Button>
+                    </Link>
+                    <Link href="/admin/customers">
+                        <Button variant="ghost" className="w-full justify-start gap-2">
+                            <Users className="h-4 w-4" />
+                            CRM
+                        </Button>
+                    </Link>
+                    <Link href="/admin/stores">
+                        <Button variant="ghost" className="w-full justify-start gap-2">
+                            <Building className="h-4 w-4" />
+                            Stores
                         </Button>
                     </Link>
                     <Link href="/admin/settings">

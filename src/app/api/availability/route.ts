@@ -1,157 +1,129 @@
 import { createClient } from '@/lib/supabase/server';
-import { oauth2Client } from '@/lib/google/oauth';
-import { google } from 'googleapis';
 import { NextResponse } from 'next/server';
-import { addMinutes, format, parse, isBefore, startOfDay, endOfDay } from 'date-fns';
+import { calculateAvailableSlots } from '@/lib/booking-logic';
+import { format, parseISO } from 'date-fns';
+import { Booking, Shift, Store } from '@/types';
 
 export async function POST(request: Request) {
     try {
-        const { date, serviceId } = await request.json(); // date: '2024-12-25', serviceId: 'ac'
+        const body = await request.json();
+        let { date, cartItems, storeSlug, organizationSlug, staffId } = body;
+
+        // Fallback for legacy calls (if any)
+        if (!cartItems && body.serviceId) {
+            cartItems = [{ serviceId: body.serviceId, quantity: 1 }];
+        }
+
+        if (!date || !cartItems || cartItems.length === 0) {
+            return NextResponse.json({ error: 'Missing required fields' }, { status: 400 });
+        }
+
         const supabase = await createClient();
 
-        // 1. Get Store & Credentials
-        const { data: store } = await supabase
-            .from('stores')
-            .select('id, google_refresh_token')
-            .limit(1)
-            .single();
+        // 1. Resolve Store
+        // Ideally we search by org slug + store slug, or just store slug if unique enough or passed directly.
+        // For v1.1, let's assume storeSlug is unique or we can find it.
+        // Actually, schema has store.slug.
+        // Let's query store with Organization info to be safe or just store.
 
-        if (!store || !store.google_refresh_token) {
-            // If not connected, fallback to "All Open" (or fail? Phase 0 behavior was open)
-            // For Phase 1, fail safely or return all slots?
-            // Let's return defaults but warn.
-            console.warn('Google Calendar not connected. Returning default slots.');
-            return NextResponse.json(generateDefaultSlots());
+        let storeQuery = supabase.from('stores').select('*');
+        if (storeSlug) {
+            storeQuery = storeQuery.eq('slug', storeSlug);
+        } else {
+            // If no slug, maybe we need ID? 
+            return NextResponse.json({ error: 'Store identifier required' }, { status: 400 });
         }
 
-        // 2. Setup Google Client
-        // Create a new client instance to avoid race conditions with singleton
-        const { google } = await import('googleapis');
-        const { GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET, BASE_URL } = await import('@/lib/google/oauth');
-
-        const oauth2Client = new google.auth.OAuth2(
-            GOOGLE_CLIENT_ID,
-            GOOGLE_CLIENT_SECRET,
-            `${BASE_URL}/api/auth/google/callback`
-        );
-        oauth2Client.setCredentials({ refresh_token: store.google_refresh_token });
-        const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
-
-        // 3. Get Service Duration
-        const { data: service } = await supabase
-            .from('services')
-            .select('duration_minutes')
-            .eq('id', serviceId)
-            .single();
-
-        const duration = service?.duration_minutes || 60; // default 60
-
-        // 4. Get All Active Staff
-        const { data: staffList } = await supabase
-            .from('staff')
-            .select('id, google_calendar_id')
-            .eq('is_active', true)
-            .eq('store_id', store.id);
-
-        if (!staffList || staffList.length === 0) {
-            return NextResponse.json([]);
+        const { data: stores, error: storeError } = await storeQuery.limit(1);
+        if (storeError || !stores || stores.length === 0) {
+            return NextResponse.json({ error: 'Store not found' }, { status: 404 });
         }
+        const store = stores[0] as Store;
 
-        // 5. Calculate Time Range (09:00 - 18:00)
-        // Hardcoded business hours for MVP
-        const targetDate = new Date(date);
-        const timeMin = new Date(targetDate); timeMin.setHours(9, 0, 0, 0);
-        const timeMax = new Date(targetDate); timeMax.setHours(18, 0, 0, 0);
+        // 2. Calculate Service Duration (including options)
+        const serviceIds = cartItems.map((i: any) => i.serviceId);
+        const { data: services } = await supabase.from('services').select('id, duration_minutes').in('id', serviceIds);
 
-        // 6. Check Availability for EACH Staff
-        // A slot is available if AT LEAST ONE staff is free.
-        // We will collect "Busy Ranges" for each staff.
+        // Fetch all potential options for these services to get their durations
+        const { data: allOptions } = await supabase.from('service_options').select('id, duration_minutes').in('service_id', serviceIds);
 
-        const staffBusyRanges: Record<string, { start: Date, end: Date }[]> = {};
+        let totalDuration = 0;
+        cartItems.forEach((item: any) => {
+            const s = services?.find(svc => svc.id === item.serviceId);
+            if (s) {
+                // Base service duration
+                totalDuration += s.duration_minutes * (item.quantity || 1);
 
-        for (const staff of staffList) {
-            staffBusyRanges[staff.id] = [];
-
-            // A. Fetch GCal Events
-            if (staff.google_calendar_id) {
-                try {
-                    const res = await calendar.events.list({
-                        calendarId: staff.google_calendar_id, // e.g. 'primary' or specific ID
-                        timeMin: timeMin.toISOString(),
-                        timeMax: timeMax.toISOString(),
-                        singleEvents: true,
-                    });
-                    const events = res.data.items || [];
-                    events.forEach(event => {
-                        if (event.start?.dateTime && event.end?.dateTime) {
-                            staffBusyRanges[staff.id].push({
-                                start: new Date(event.start.dateTime),
-                                end: new Date(event.end.dateTime)
-                            });
+                // Options duration
+                if (item.selectedOptions && item.selectedOptions.length > 0) {
+                    item.selectedOptions.forEach((optId: string) => {
+                        const opt = allOptions?.find(o => o.id === optId);
+                        if (opt) {
+                            totalDuration += opt.duration_minutes;
                         }
                     });
-                } catch (e) {
-                    console.error(`Failed to fetch GCal for staff ${staff.id}`, e);
-                    // Treat as full busy? Or ignore? Ignore for now to not block others.
                 }
             }
+        });
 
-            // B. Fetch Internal Bookings (Double check)
-            // DB Bookings should be synced to GCal, but fetching DB is safer for "Just Booked" items
-            const { data: internalBookings } = await supabase
-                .from('bookings')
-                .select('start_time, end_time')
-                .eq('staff_id', staff.id)
-                .gte('start_time', timeMin.toISOString())
-                .lte('end_time', timeMax.toISOString())
-                .neq('status', 'cancelled');
+        // Add buffer/travel time (e.g. 30 min fixed for now - from PRD 12-1)
+        totalDuration += 30;
 
-            internalBookings?.forEach(b => {
-                staffBusyRanges[staff.id].push({
-                    start: new Date(b.start_time),
-                    end: new Date(b.end_time)
-                });
-            });
+        // 3. Fetch Data for Calculation
+        const targetDate = parseISO(date); // assumes YYYY-MM-DD
+        const dateStr = format(targetDate, 'yyyy-MM-dd'); // ensure format
+
+        // Shifts
+        // Fetch shifts for this store on this date
+        // Note: shifts has start_time/end_time as timestamptz.
+        // We need shifts that overlap with the day.
+        // Actually, simple query: start_time >= dayStart AND start_time < dayEnd
+        const dayStart = `${dateStr}T00:00:00`;
+        const dayEnd = `${dateStr}T23:59:59`;
+
+        let shiftsQuery = supabase
+            .from('shifts')
+            .select('*')
+            .eq('store_id', store.id)
+            .gte('end_time', dayStart)
+            .lte('start_time', dayEnd)
+            .eq('is_published', true);
+
+        if (staffId) {
+            shiftsQuery = shiftsQuery.eq('staff_id', staffId);
         }
 
-        // 7. Generate Slots and Check Against Staff
-        const availableSlots: string[] = [];
-        const slotsToCheck = generateDefaultSlots(); // ["09:00", ... "17:00"] assuming hourly
+        const { data: shiftsData } = await shiftsQuery;
+        const shifts = (shiftsData || []) as Shift[];
 
-        for (const timeStr of slotsToCheck) {
-            // "09:00" -> Date object
-            const slotStart = parse(timeStr, 'HH:mm', targetDate);
-            const slotEnd = addMinutes(slotStart, duration);
+        // Bookings
+        const { data: bookingsData } = await supabase
+            .from('bookings')
+            .select('*')
+            .eq('store_id', store.id)
+            .neq('status', 'cancelled')
+            .gte('end_time', dayStart)
+            .lte('start_time', dayEnd);
 
-            // Check if ANY staff is free during [slotStart, slotEnd]
-            let isSlotAvailable = false;
+        const bookings = (bookingsData || []) as Booking[];
 
-            for (const staff of staffList) {
-                const busy = staffBusyRanges[staff.id];
-                const isStaffFree = !busy.some(range => {
-                    // Overlap check
-                    return (slotStart < range.end && slotEnd > range.start);
-                });
+        // 4. Run Logic
+        const allSlots = calculateAvailableSlots(
+            targetDate,
+            totalDuration,
+            store,
+            shifts,
+            bookings
+        );
 
-                if (isStaffFree) {
-                    isSlotAvailable = true;
-                    break; // Found one!
-                }
-            }
+        // 5. Format Response
+        // Return unique start times
+        const uniqueStartTimes = Array.from(new Set(allSlots.map(s => format(s.start, 'HH:mm')))).sort();
 
-            if (isSlotAvailable) {
-                availableSlots.push(timeStr);
-            }
-        }
-
-        return NextResponse.json(availableSlots);
+        return NextResponse.json(uniqueStartTimes);
 
     } catch (error: any) {
         console.error('Availability API Error:', error);
         return NextResponse.json({ error: error.message }, { status: 500 });
     }
-}
-
-function generateDefaultSlots() {
-    return ["09:00", "10:00", "11:00", "13:00", "14:00", "15:00", "16:00", "17:00"];
 }

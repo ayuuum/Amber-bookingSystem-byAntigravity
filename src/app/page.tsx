@@ -22,13 +22,28 @@ export default function Home() {
                   Haukuri Proの違いを体験してください。信頼性が高く、効率的で、ニーズに合わせた完璧な清掃を提供します。
                 </p>
               </div>
-              <div className="space-x-4">
-                <Button asChild size="lg" className="h-11 px-8">
-                  <Link href="/booking">オンライン予約</Link>
+              <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">
+                <Button asChild size="lg" className="h-14 px-10 text-lg font-bold shadow-lg hover:shadow-xl transition-all">
+                  <Link href="/booking" className="flex items-center gap-2">
+                    <Calendar className="h-5 w-5" />
+                    今すぐ無料で予約する
+                  </Link>
                 </Button>
-                <Button variant="outline" size="lg" className="h-11 px-8">
+                <Button variant="outline" size="lg" className="h-14 px-10 text-lg">
                   詳しく見る
                 </Button>
+              </div>
+              {/* 信頼の証 */}
+              <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-sm text-muted-foreground mt-4">
+                <span className="flex items-center gap-1.5">
+                  <Shield className="h-4 w-4 text-green-500" /> 身元確認済みスタッフ
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <CheckCircle className="h-4 w-4 text-blue-500" /> 満足保証
+                </span>
+                <span className="flex items-center gap-1.5">
+                  <Clock className="h-4 w-4 text-amber-500" /> 最短翌日対応
+                </span>
               </div>
             </div>
           </div>

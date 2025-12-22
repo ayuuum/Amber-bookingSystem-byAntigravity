@@ -11,12 +11,13 @@ export function getGoogleCalendarClient() {
         return null;
     }
 
-    const auth = new google.auth.JWT(
-        clientEmail,
-        undefined,
-        privateKey,
-        SCOPES
-    );
+    const auth = new google.auth.GoogleAuth({
+        credentials: {
+            client_email: clientEmail,
+            private_key: privateKey,
+        },
+        scopes: SCOPES,
+    });
 
     return google.calendar({ version: 'v3', auth });
 }
