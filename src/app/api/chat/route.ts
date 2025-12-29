@@ -1,6 +1,6 @@
 
 import { createClient } from '@/lib/supabase/server';
-import { openai } from '@ai-sdk/openai';
+import { google } from '@ai-sdk/google';
 import { streamText, tool } from 'ai';
 import { z } from 'zod';
 
@@ -12,17 +12,17 @@ export async function POST(req: Request) {
     const supabase = await createClient();
 
     // Fallback if no API key is set
-    if (!process.env.OPENAI_API_KEY) {
+    if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
         return new Response(JSON.stringify({
             messages: [{
                 role: 'assistant',
-                content: '申し訳ありません。現在AIサービスの設定が完了していません (OPENAI_API_KEY missing)。',
+                content: '申し訳ありません。現在AIサービスの設定が完了していません (GOOGLE_GENERATIVE_AI_API_KEY missing)。',
             }]
         }), { status: 200 }); // Or handle gracefully as stream
     }
 
     const result = await streamText({
-        model: openai('gpt-4o'),
+        model: google('models/gemini-1.5-pro-latest') as any,
         system: `あなたは「Haukuri Pro（ハウクリプロ）」の予約受付AIアシスタントです。
         以下の指示に従ってください：
         1. 丁寧で親しみやすい口調で話してください（例：「ございます」「ですね」）。
@@ -38,8 +38,8 @@ export async function POST(req: Request) {
                 description: '提供している掃除サービスのリストと料金を取得します',
                 parameters: z.object({}),
                 execute: async () => {
-                    const { data } = await supabase.from('services').select('name, price, duration_minutes');
-                    return data?.map(s => `${s.name}: ${s.price}円 (${s.duration_minutes}分)`) || [];
+                    const { data } = await supabase.from('services').select('title, price, duration_minutes');
+                    return data?.map(s => `${s.title}: ${s.price}円 (${s.duration_minutes}分)`) || [];
                 },
             }),
             checkAvailability: tool({
@@ -75,7 +75,7 @@ export async function POST(req: Request) {
                     const { data: service } = await supabase
                         .from('services')
                         .select('id, price, duration_minutes')
-                        .ilike('name', `%${serviceName}%`)
+                        .ilike('title', `%${serviceName}%`)
                         .limit(1)
                         .single();
 
@@ -87,7 +87,7 @@ export async function POST(req: Request) {
                         customerId = existingCustomer.id;
                     } else {
                         const { data: newCustomer, error: cError } = await supabase.from('customers').insert({
-                            name: customerName,
+                            full_name: customerName,
                             phone: customerPhone
                         }).select().single();
                         if (cError) return '顧客情報の登録に失敗しました。';

@@ -1,149 +1,108 @@
-import Link from "next/link";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { Navbar } from "@/components/layout/Navbar";
-import { Footer } from "@/components/layout/Footer";
-import { Calendar, CheckCircle, Clock, Shield } from "lucide-react";
+import { BookingForm } from "@/components/features/booking/BookingForm";
+import { createClient } from "@/lib/supabase/server";
 
-export default function Home() {
-  return (
-    <div className="flex min-h-screen flex-col">
-      <Navbar />
-      <main className="flex-1">
-        {/* Hero Section */}
-        <section className="w-full py-12 md:py-24 lg:py-32 xl:py-48 bg-slate-50 dark:bg-slate-950">
-          <div className="container px-4 md:px-6">
-            <div className="flex flex-col items-center space-y-4 text-center">
-              <div className="space-y-2">
-                <h1 className="text-3xl font-bold tracking-tighter sm:text-4xl md:text-5xl lg:text-6xl/none">
-                  あなたの家のための<br />プロフェッショナルなクリーニング
-                </h1>
-                <p className="mx-auto max-w-[700px] text-gray-500 md:text-xl dark:text-gray-400">
-                  Haukuri Proの違いを体験してください。信頼性が高く、効率的で、ニーズに合わせた完璧な清掃を提供します。
-                </p>
-              </div>
-              <div className="flex flex-col gap-4 sm:flex-row sm:gap-6">
-                <Button asChild size="lg" className="h-14 px-10 text-lg font-bold shadow-lg hover:shadow-xl transition-all">
-                  <Link href="/booking" className="flex items-center gap-2">
-                    <Calendar className="h-5 w-5" />
-                    今すぐ無料で予約する
-                  </Link>
-                </Button>
-                <Button variant="outline" size="lg" className="h-14 px-10 text-lg">
-                  詳しく見る
-                </Button>
-              </div>
-              {/* 信頼の証 */}
-              <div className="flex flex-wrap items-center justify-center gap-4 sm:gap-6 text-sm text-muted-foreground mt-4">
-                <span className="flex items-center gap-1.5">
-                  <Shield className="h-4 w-4 text-green-500" /> 身元確認済みスタッフ
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <CheckCircle className="h-4 w-4 text-blue-500" /> 満足保証
-                </span>
-                <span className="flex items-center gap-1.5">
-                  <Clock className="h-4 w-4 text-amber-500" /> 最短翌日対応
-                </span>
-              </div>
-            </div>
-          </div>
-        </section>
+export default async function Home() {
+    const supabase = await createClient();
 
-        {/* Features Section */}
-        <section className="w-full py-12 md:py-24 lg:py-32">
-          <div className="container px-4 md:px-6">
-            <div className="grid gap-10 sm:px-10 md:gap-16 md:grid-cols-2">
-              <div className="space-y-4">
-                <div className="inline-block rounded-lg bg-blue-100 px-3 py-1 text-sm dark:bg-blue-800 text-blue-800 dark:text-blue-100">
-                  選ばれる理由
-                </div>
-                <h2 className="text-3xl font-bold tracking-tighter md:text-4xl/tight">
-                  すべての訪問で最高のクリーニングを
-                </h2>
-                <p className="max-w-[600px] text-gray-500 md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed dark:text-gray-400">
-                  私たちは品質、信頼性、顧客満足度を重視しています。プロのスタッフがあなたのすべての清掃ニーズに対応します。
-                </p>
-              </div>
-              <div className="grid gap-4 md:gap-8">
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
-                    <Calendar className="h-6 w-6 text-blue-600" />
-                    <h3 className="text-xl font-bold">簡単なオンライン予約</h3>
-                  </div>
-                  <p className="text-gray-500 dark:text-gray-400">シンプルなオンライン予約システムで、数分で清掃を予約できます。</p>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
-                    <Shield className="h-6 w-6 text-blue-600" />
-                    <h3 className="text-xl font-bold">信頼と実績</h3>
-                  </div>
-                  <p className="text-gray-500 dark:text-gray-400">すべての清掃スタッフは身元確認済みで、厳しいトレーニングを受けています。</p>
-                </div>
-                <div className="flex flex-col gap-2">
-                  <div className="flex items-center gap-2">
-                    <CheckCircle className="h-6 w-6 text-blue-600" />
-                    <h3 className="text-xl font-bold">満足保証</h3>
-                  </div>
-                  <p className="text-gray-500 dark:text-gray-400">もしご満足いただけない場合は、誠意を持って対応いたします。あなたの満足が私たちの優先事項です。</p>
-                </div>
-              </div>
-            </div>
-          </div>
-        </section>
+    // ストア情報を取得（settingsも含める）
+    const { data: store, error } = await supabase
+        .from('stores')
+        .select('slug, organization_id, settings')
+        .order('created_at', { ascending: true })
+        .limit(1)
+        .single();
 
-        {/* Services Showcase */}
-        <section className="w-full py-12 md:py-24 lg:py-32 bg-slate-50 dark:bg-slate-950">
-          <div className="container px-4 md:px-6">
-            <div className="flex flex-col items-center justify-center space-y-4 text-center">
-              <div className="space-y-2">
-                <h2 className="text-3xl font-bold tracking-tighter md:text-4xl">人気のサービス</h2>
-                <p className="max-w-[900px] text-gray-500 md:text-xl/relaxed lg:text-base/relaxed xl:text-xl/relaxed dark:text-gray-400">
-                  幅広い清掃ソリューションからお選びください。
-                </p>
-              </div>
+    // エラーハンドリング: ストアが見つからない場合はシードAPIへのリンクを表示
+    if (error || !store) {
+        return (
+            <div className="min-h-screen flex items-center justify-center bg-background">
+                <div className="text-center space-y-6 px-4 max-w-md">
+                    <h1 className="text-2xl font-bold text-foreground">ストアが見つかりません</h1>
+                    <p className="text-muted-foreground">
+                        予約可能なストアが設定されていません。
+                    </p>
+                    <div className="space-y-3">
+                        <p className="text-sm text-muted-foreground">
+                            デモデータを作成するには、以下のリンクにアクセスしてください：
+                        </p>
+                        <a
+                            href="/api/test/seed"
+                            className="inline-block px-6 py-3 bg-primary text-primary-foreground rounded-lg font-semibold hover:bg-primary/90 transition-colors"
+                        >
+                            デモデータを作成
+                        </a>
+                        <p className="text-xs text-muted-foreground mt-4">
+                            データ作成後、このページをリロードしてください。
+                        </p>
+                    </div>
+                </div>
             </div>
-            <div className="mx-auto grid max-w-5xl items-center gap-6 py-12 lg:grid-cols-3">
-              <Card>
-                <CardHeader>
-                  <CardTitle>エアコンクリーニング</CardTitle>
-                  <CardDescription>空気の質を改善する徹底的な洗浄。</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-gray-500 mb-4">¥12,000 から</p>
-                  <Button className="w-full" asChild>
-                    <Link href="/booking?service=ac">予約する</Link>
-                  </Button>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle>キッチン・レンジフード</CardTitle>
-                  <CardDescription>油汚れの除去と除菌。</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-gray-500 mb-4">¥15,000 から</p>
-                  <Button className="w-full" asChild>
-                    <Link href="/booking?service=kitchen">予約する</Link>
-                  </Button>
-                </CardContent>
-              </Card>
-              <Card>
-                <CardHeader>
-                  <CardTitle>浴室クリーニング</CardTitle>
-                  <CardDescription>カビの除去と徹底的な磨き上げ。</CardDescription>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-sm text-gray-500 mb-4">¥10,000 から</p>
-                  <Button className="w-full" asChild>
-                    <Link href="/booking?service=bathroom">予約する</Link>
-                  </Button>
-                </CardContent>
-              </Card>
+        );
+    }
+
+    // organizationのslugを取得するクエリを準備
+    const orgQuery = store.organization_id
+        ? supabase
+            .from('organizations')
+            .select('slug')
+            .eq('id', store.organization_id)
+            .single()
+        : Promise.resolve({ data: null });
+
+    // 並列実行
+    const [orgRes] = await Promise.all([orgQuery]);
+
+    let orgSlug = 'default';
+    if (orgRes.data?.slug) {
+        orgSlug = orgRes.data.slug;
+    } else if (store.organization_id) {
+        orgSlug = store.organization_id;
+    }
+
+    const storeSlug = store.slug;
+
+    // ヒーローセクションの設定を取得（デフォルト値付き）
+    const theme = store.settings?.theme || {};
+    const heroTitle = theme.hero_title || "究極の「おもてなし」を、\nあなたの住まいに。";
+    const heroDescription = theme.hero_description || "Amberは、技術とホスピタリティを極めた掃除代行サービスです。";
+    const heroBackgroundImage = theme.hero_background_image || "/hero.png";
+
+    return (
+        <div className="min-h-screen bg-background">
+            {/* Optimized Hero Section */}
+            <div className="relative h-[60vh] min-h-[400px] w-full overflow-hidden">
+                <img
+                    src={heroBackgroundImage}
+                    alt="Amber House Cleaning"
+                    className="absolute inset-0 w-full h-full object-cover"
+                    onError={(e) => {
+                        (e.target as HTMLImageElement).src = "/hero.png";
+                    }}
+                />
+                <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
+                <div className="absolute inset-0 flex items-center justify-center text-center p-4">
+                    <div className="max-w-4xl space-y-6">
+                        <h1 className="text-4xl md:text-6xl font-black text-white drop-shadow-2xl">
+                            {heroTitle.split('\n').map((line, i) => (
+                                <span key={i}>
+                                    {line}
+                                    {i < heroTitle.split('\n').length - 1 && <br />}
+                                </span>
+                            ))}
+                        </h1>
+                        <p className="text-xl text-white/90 font-medium drop-shadow-md">
+                            {heroDescription}
+                        </p>
+                    </div>
+                </div>
             </div>
-          </div>
-        </section>
-      </main>
-      <Footer />
-    </div>
-  );
+
+            <div className="max-w-7xl mx-auto py-12 px-4 sm:px-6 lg:px-8 -mt-20 relative z-10">
+                <BookingForm
+                    orgSlug={orgSlug}
+                    storeSlug={storeSlug}
+                />
+            </div>
+        </div>
+    );
 }

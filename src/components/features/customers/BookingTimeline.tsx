@@ -38,7 +38,7 @@ export function BookingTimeline({ bookings }: BookingTimelineProps) {
                                             {format(new Date(booking.start_time), "yyyy MMMM do", { locale: ja })}
                                         </time>
                                         <h4 className="text-xl font-black text-slate-800 tracking-tight">
-                                            {booking.services?.name || booking.services?.title || "サービス名称なし"}
+                                            {booking.services?.title || "サービス名称なし"}
                                         </h4>
                                     </div>
                                     <Badge variant={booking.status === 'completed' ? 'default' : 'outline'} className={`rounded-lg font-bold ${booking.status === 'completed' ? 'bg-emerald-500 text-white border-none' : 'text-slate-500 border-slate-200'}`}>

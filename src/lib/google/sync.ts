@@ -15,9 +15,9 @@ export async function syncBookingToGoogleCalendar(staff: any, booking: any) {
         const calendar = google.calendar({ version: 'v3', auth: oauth2Client });
 
         const event = {
-            summary: `【Amber】${booking.booking_items?.[0]?.services?.title || '清掃予約'} - ${booking.customers?.name}様`,
+            summary: `【Amber】${booking.booking_items?.[0]?.services?.title || '清掃予約'} - ${booking.customers?.full_name}様`,
             location: booking.customers?.address,
-            description: `お客様: ${booking.customers?.name}様\n電話: ${booking.customers?.phone}\n備考: ${booking.notes || 'なし'}\n\nAmber Booking ID: ${booking.id}`,
+            description: `お客様: ${booking.customers?.full_name}様\n電話: ${booking.customers?.phone}\n備考: ${booking.notes || 'なし'}\n\nAmber Booking ID: ${booking.id}`,
             start: {
                 dateTime: new Date(booking.start_time).toISOString(),
                 timeZone: 'Asia/Tokyo',
