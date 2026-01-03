@@ -1,71 +1,65 @@
-import { createClient } from '@/lib/supabase/server';
 import { checkResourceLimit } from '@/lib/plan/access';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { withAuth, ApiContext } from '@/lib/api/middleware';
+import { AmberErrors, errorResponse } from '@/lib/errors';
 
-export async function POST(req: Request) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+async function postHandler(request: NextRequest, context: ApiContext) {
+    const { supabase, user } = context;
 
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    const { data: profile } = await supabase.from('profiles').select('organization_id').eq('id', user.id).single();
-    if (!profile?.organization_id) return NextResponse.json({ error: 'No organization' }, { status: 403 });
-
-    try {
-        const body = await req.json();
-        const { name, email, phone, role = 'staff' } = body;
-
-        // 1. Plan Guard: Check Staff Limit
-        const { allowed, current, limit } = await checkResourceLimit(profile.organization_id, 'staff');
-
-        if (!allowed) {
-            return NextResponse.json({
-                error: 'PLAN_LIMIT_REACHED',
-                message: `現在のプランのスタッフ数上限（${limit}名）に達しています。上位プランへのアップグレードをご検討ください。`,
-                current,
-                limit
-            }, { status: 403 });
-        }
-
-        // 2. Create Staff (Assuming simplified creation flow for Phase 1.3)
-        // In a real app, this might involve Auth logic too.
-        const { data: staff, error: createError } = await supabase
-            .from('staff')
-            .insert({
-                name,
-                email,
-                phone,
-                role,
-                organization_id: profile.organization_id,
-                is_active: true
-            })
-            .select()
-            .single();
-
-        if (createError) throw createError;
-
-        return NextResponse.json(staff);
-
-    } catch (error: any) {
-        console.error('Create Staff Error:', error);
-        return NextResponse.json({ error: error.message || 'Internal Error' }, { status: 500 });
+    if (!user.organizationId) {
+        return errorResponse(AmberErrors.FORBIDDEN());
     }
+
+    const body = await request.json();
+    const { name, email, phone, role = 'staff' } = body;
+
+    // Plan Guard: Check Staff Limit
+    const { allowed, current, limit } = await checkResourceLimit(user.organizationId, 'staff');
+
+    if (!allowed) {
+        return errorResponse(AmberErrors.PLAN_STAFF_LIMIT(current, limit));
+    }
+
+    // Create Staff
+    const { data: staff, error: createError } = await supabase
+        .from('staff')
+        .insert({
+            name,
+            email,
+            phone,
+            role,
+            organization_id: user.organizationId,
+            is_active: true
+        })
+        .select()
+        .single();
+
+    if (createError) {
+        return errorResponse(AmberErrors.DATABASE_ERROR(createError.message));
+    }
+
+    return NextResponse.json(staff);
 }
 
-export async function GET(req: Request) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+async function getHandler(request: NextRequest, context: ApiContext) {
+    const { supabase, user } = context;
 
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user.organizationId) {
+        return NextResponse.json([]);
+    }
 
-    const { data: profile } = await supabase.from('profiles').select('organization_id').eq('id', user.id).single();
-    if (!profile?.organization_id) return NextResponse.json([]);
-
-    const { data: staff } = await supabase
+    const { data: staff, error } = await supabase
         .from('staff')
         .select('*')
-        .eq('organization_id', profile.organization_id)
+        .eq('organization_id', user.organizationId)
         .order('created_at', { ascending: true });
+
+    if (error) {
+        return errorResponse(AmberErrors.DATABASE_ERROR());
+    }
 
     return NextResponse.json(staff || []);
 }
+
+export const POST = withAuth(postHandler);
+export const GET = withAuth(getHandler);

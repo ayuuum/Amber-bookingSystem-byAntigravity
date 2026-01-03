@@ -18,75 +18,105 @@ export function CustomerInfo({ form }: CustomerInfoProps) {
         <div className="space-y-10">
             <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                        <Label htmlFor="customerName" className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                            <User className="w-3.5 h-3.5" /> お名前 <span className="text-amber-500 font-black">*</span>
-                        </Label>
-                        <Input
-                            id="customerName"
-                            placeholder="山田 太郎"
-                            className="h-12 rounded-xl border-slate-200 focus:ring-amber-500 font-bold"
-                            {...register("customerName")}
-                        />
-                        {errors.customerName && <p className="text-destructive text-xs font-bold">{errors.customerName.message}</p>}
+                    <div className="space-y-4">
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="lastName" className="text-xs font-black uppercase tracking-widest text-foreground flex items-center gap-2">
+                                    <User className="w-3.5 h-3.5" aria-hidden="true" /> 姓 <span className="text-destructive font-black">*</span>
+                                </Label>
+                                <Input
+                                    id="lastName"
+                                    placeholder="山田"
+                                    className="h-12 glass-input rounded-xl font-bold focus:ring-4 focus:ring-ring transition-all text-foreground"
+                                    aria-describedby={errors.lastName ? "lastName-error" : undefined}
+                                    aria-invalid={!!errors.lastName}
+                                    {...register("lastName")}
+                                />
+                                {errors.lastName && <p id="lastName-error" className="text-destructive text-xs font-bold" role="alert">{errors.lastName.message}</p>}
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="firstName" className="text-xs font-black uppercase tracking-widest text-foreground flex items-center gap-2">
+                                    <User className="w-3.5 h-3.5" aria-hidden="true" /> 名 <span className="text-destructive font-black">*</span>
+                                </Label>
+                                <Input
+                                    id="firstName"
+                                    placeholder="太郎"
+                                    className="h-12 glass-input rounded-xl font-bold focus:ring-4 focus:ring-ring transition-all text-foreground"
+                                    aria-describedby={errors.firstName ? "firstName-error" : undefined}
+                                    aria-invalid={!!errors.firstName}
+                                    {...register("firstName")}
+                                />
+                                {errors.firstName && <p id="firstName-error" className="text-destructive text-xs font-bold" role="alert">{errors.firstName.message}</p>}
+                            </div>
+                        </div>
                     </div>
 
                     <div className="space-y-2">
-                        <Label htmlFor="customerPhone" className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                            <Phone className="w-3.5 h-3.5" /> 電話番号 <span className="text-amber-500 font-black">*</span>
+                        <Label htmlFor="phone" className="text-xs font-black uppercase tracking-widest text-foreground flex items-center gap-2">
+                            <Phone className="w-3.5 h-3.5" aria-hidden="true" /> 電話番号 <span className="text-destructive font-black">*</span>
                         </Label>
                         <Input
-                            id="customerPhone"
+                            id="phone"
                             type="tel"
                             placeholder="090-1234-5678"
-                            className="h-12 rounded-xl border-slate-200 focus:ring-amber-500 font-bold"
-                            {...register("customerPhone")}
+                            className="h-12 glass-input rounded-xl font-bold focus:ring-4 focus:ring-ring transition-all text-foreground"
+                            aria-describedby={errors.phone ? "phone-error" : undefined}
+                            aria-invalid={!!errors.phone}
+                            {...register("phone")}
                         />
-                        {errors.customerPhone && <p className="text-destructive text-xs font-bold">{errors.customerPhone.message}</p>}
+                        {errors.phone && <p id="phone-error" className="text-destructive text-xs font-bold" role="alert">{errors.phone.message}</p>}
                     </div>
                 </div>
 
                 <div className="space-y-2">
-                    <Label htmlFor="customerEmail" className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                        <Mail className="w-3.5 h-3.5" /> メールアドレス (任意)
+                    <Label htmlFor="email" className="text-xs font-black uppercase tracking-widest text-foreground flex items-center gap-2">
+                        <Mail className="w-3.5 h-3.5" aria-hidden="true" /> メールアドレス (任意)
                     </Label>
                     <Input
-                        id="customerEmail"
+                        id="email"
                         type="email"
                         placeholder="taro@example.com"
-                        className="h-12 rounded-xl border-slate-200 focus:ring-amber-500 font-bold"
-                        {...register("customerEmail")}
+                        className="h-12 glass-input rounded-xl font-bold focus:ring-4 focus:ring-ring transition-all text-foreground"
+                        aria-describedby={errors.email ? "email-error" : undefined}
+                        aria-invalid={!!errors.email}
+                        {...register("email")}
                     />
+                    {errors.email && <p id="email-error" className="text-destructive text-xs font-bold" role="alert">{errors.email.message}</p>}
                 </div>
 
                 <div className="space-y-2">
-                    <Label htmlFor="customerAddress" className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                        <Home className="w-3.5 h-3.5" /> 訪問先住所 <span className="text-amber-500 font-black">*</span>
+                    <Label htmlFor="address" className="text-xs font-black uppercase tracking-widest text-foreground flex items-center gap-2">
+                        <Home className="w-3.5 h-3.5" aria-hidden="true" /> 訪問先住所 <span className="text-destructive font-black">*</span>
                     </Label>
                     <Input
-                        id="customerAddress"
+                        id="address"
                         placeholder="東京都渋谷区..."
-                        className="h-12 rounded-xl border-slate-200 focus:ring-amber-500 font-bold"
-                        {...register("customerAddress")}
+                        className="h-12 glass-input rounded-xl font-bold focus:ring-4 focus:ring-ring transition-all text-foreground"
+                        aria-describedby={errors.address ? "address-error" : undefined}
+                        aria-invalid={!!errors.address}
+                        {...register("address")}
                     />
-                    {errors.customerAddress && <p className="text-destructive text-xs font-bold">{errors.customerAddress.message}</p>}
+                    {errors.address && <p id="address-error" className="text-destructive text-xs font-bold" role="alert">{errors.address.message}</p>}
                 </div>
 
                 <div className="space-y-2">
-                    <Label htmlFor="customerNotes" className="text-xs font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
-                        <MessageSquare className="w-3.5 h-3.5" /> 備考・ご要望
+                    <Label htmlFor="customerNotes" className="text-xs font-black uppercase tracking-widest text-foreground flex items-center gap-2">
+                        <MessageSquare className="w-3.5 h-3.5" aria-hidden="true" /> 備考・ご要望
                     </Label>
                     <Textarea
                         id="customerNotes"
                         placeholder="駐車場や鍵の受け渡し方法など..."
-                        className="rounded-xl border-slate-200 focus:ring-amber-500 font-bold min-h-[100px]"
+                        className="glass-input rounded-xl font-bold min-h-[100px] focus:ring-4 focus:ring-ring transition-all text-foreground"
+                        aria-describedby={errors.notes ? "notes-error" : undefined}
+                        aria-invalid={!!errors.notes}
                         {...register("notes")}
                     />
+                    {errors.notes && <p id="notes-error" className="text-destructive text-xs font-bold" role="alert">{errors.notes.message}</p>}
                 </div>
             </div>
 
-            <div className="pt-6 border-t border-slate-100 space-y-4">
-                <Label className="text-sm font-black text-slate-900">お支払い方法</Label>
+            <div className="pt-6 border-t border-border space-y-4">
+                <Label className="text-sm font-black text-foreground">お支払い方法</Label>
                 <FormField
                     control={control}
                     name="paymentMethod"
@@ -104,19 +134,27 @@ export function CustomerInfo({ form }: CustomerInfoProps) {
                                         </FormControl>
                                         <Label
                                             htmlFor="pay_on_site"
-                                            className="flex items-center justify-between p-4 bg-white border-2 border-slate-100 rounded-2xl cursor-pointer hover:border-amber-200 peer-data-[state=checked]:border-amber-500 peer-data-[state=checked]:bg-amber-50/50 transition-all"
+                                            className={`flex items-center justify-between p-4 glass-card border-2 rounded-2xl cursor-pointer transition-all pill-button ${
+                                                field.value === 'on_site' ? 'border-ring glow-effect' : 'border-border hover:border-ring/50'
+                                            }`}
                                         >
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 group-peer-data-[state=checked]:bg-amber-100 group-peer-data-[state=checked]:text-amber-600">
-                                                    <Banknote className="w-5 h-5" />
+                                                <div className={`w-10 h-10 glass-card rounded-xl flex items-center justify-center transition-all ${
+                                                    field.value === 'on_site' ? 'text-foreground' : 'text-muted-foreground'
+                                                }`}>
+                                                    <Banknote className="w-5 h-5" aria-hidden="true" />
                                                 </div>
                                                 <div>
-                                                    <div className="font-bold text-slate-900 leading-none">現地決済</div>
-                                                    <div className="text-[10px] font-medium text-slate-400 mt-1">現金・PayPay等</div>
+                                                    <div className="font-bold text-foreground leading-none">現地決済</div>
+                                                    <div className="text-[10px] font-medium text-muted-foreground mt-1">現金・PayPay等</div>
                                                 </div>
                                             </div>
-                                            <div className="w-5 h-5 rounded-full border-2 border-slate-200 flex items-center justify-center peer-data-[state=checked]:border-amber-500">
-                                                <div className="w-2.5 h-2.5 rounded-full bg-amber-500 opacity-0 peer-data-[state=checked]:opacity-100" />
+                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                                                field.value === 'on_site' ? 'border-ring' : 'border-border'
+                                            }`}>
+                                                <div className={`w-2.5 h-2.5 rounded-full transition-all ${
+                                                    field.value === 'on_site' ? 'bg-foreground' : 'bg-transparent'
+                                                }`} />
                                             </div>
                                         </Label>
                                     </FormItem>
@@ -127,19 +165,27 @@ export function CustomerInfo({ form }: CustomerInfoProps) {
                                         </FormControl>
                                         <Label
                                             htmlFor="pay_online"
-                                            className="flex items-center justify-between p-4 bg-white border-2 border-slate-100 rounded-2xl cursor-pointer hover:border-amber-200 peer-data-[state=checked]:border-amber-500 peer-data-[state=checked]:bg-amber-50/50 transition-all"
+                                            className={`flex items-center justify-between p-4 glass-card border-2 rounded-2xl cursor-pointer transition-all pill-button ${
+                                                field.value === 'online_card' ? 'border-ring glow-effect' : 'border-border hover:border-ring/50'
+                                            }`}
                                         >
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 group-peer-data-[state=checked]:bg-amber-100 group-peer-data-[state=checked]:text-amber-600">
-                                                    <CreditCard className="w-5 h-5" />
+                                                <div className={`w-10 h-10 glass-card rounded-xl flex items-center justify-center transition-all ${
+                                                    field.value === 'online_card' ? 'text-foreground' : 'text-muted-foreground'
+                                                }`}>
+                                                    <CreditCard className="w-5 h-5" aria-hidden="true" />
                                                 </div>
                                                 <div>
-                                                    <div className="font-bold text-slate-900 leading-none">オンライン決済</div>
-                                                    <div className="text-[10px] font-medium text-slate-400 mt-1">クレジットカード (Stripe)</div>
+                                                    <div className="font-bold text-foreground leading-none">オンライン決済</div>
+                                                    <div className="text-[10px] font-medium text-muted-foreground mt-1">クレジットカード (Stripe)</div>
                                                 </div>
                                             </div>
-                                            <div className="w-5 h-5 rounded-full border-2 border-slate-200 flex items-center justify-center peer-data-[state=checked]:border-amber-500">
-                                                <div className="w-2.5 h-2.5 rounded-full bg-amber-500 opacity-0 peer-data-[state=checked]:opacity-100" />
+                                            <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center transition-all ${
+                                                field.value === 'online_card' ? 'border-ring' : 'border-border'
+                                            }`}>
+                                                <div className={`w-2.5 h-2.5 rounded-full transition-all ${
+                                                    field.value === 'online_card' ? 'bg-foreground' : 'bg-transparent'
+                                                }`} />
                                             </div>
                                         </Label>
                                     </FormItem>

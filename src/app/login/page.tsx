@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import Link from 'next/link'
 
 export default function LoginPage() {
     const [email, setEmail] = useState('')
@@ -30,6 +31,13 @@ export default function LoginPage() {
             setError(error.message)
             setLoading(false)
         } else {
+            // Sync metadata after login to ensure JWT has correct app_metadata
+            try {
+                await fetch('/api/auth/sync-metadata', { method: 'POST' });
+            } catch (syncError) {
+                // Don't block login if sync fails - it will be retried on next request
+                console.error('[Login] Failed to sync metadata:', syncError);
+            }
             router.push('/admin')
             router.refresh()
         }
@@ -75,6 +83,12 @@ export default function LoginPage() {
                         <Button type="submit" className="w-full" disabled={loading}>
                             {loading ? 'ログイン中...' : 'ログイン'}
                         </Button>
+                        <div className="text-center text-sm text-muted-foreground">
+                            アカウントをお持ちでない方は{' '}
+                            <Link href="/signup" className="text-foreground font-medium hover:underline">
+                                新規登録
+                            </Link>
+                        </div>
                     </form>
                 </CardContent>
             </Card>

@@ -17,6 +17,8 @@ import { HouseAssetCard } from '@/components/features/customers/HouseAssetCard';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PlusCircle, History, User, Home, MapPin, Phone, Mail } from 'lucide-react';
 import { BookingTimeline } from '@/components/features/customers/BookingTimeline';
+import { LoadingState } from '@/components/ui/loading';
+import { EmptyState } from '@/components/ui/empty-state';
 
 type ExtendedCustomer = Customer & {
     last_visit?: string;
@@ -100,9 +102,7 @@ export default function AdminCustomersPage() {
         setCustomerBookings(bookings as any[] || []);
     };
 
-    if (loading) return <div className="flex items-center justify-center min-h-[400px]">
-        <div className="animate-pulse text-slate-400 font-bold uppercase tracking-widest text-sm">Loading CRM...</div>
-    </div>;
+    if (loading) return <LoadingState message="読み込み中..." />;
 
     return (
         <div className="container mx-auto p-8 max-w-6xl space-y-12 bg-white">
@@ -125,7 +125,8 @@ export default function AdminCustomersPage() {
                 </div>
             </header>
 
-            <Card className="border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-2xl overflow-hidden">
+            {/* Desktop Table View */}
+            <Card className="border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-2xl overflow-hidden hidden md:block">
                 <CardContent className="p-0">
                     <Table>
                         <TableHeader className="bg-slate-50/50">
@@ -179,6 +180,45 @@ export default function AdminCustomersPage() {
                     </Table>
                 </CardContent>
             </Card>
+
+            {/* Mobile Card View */}
+            <div className="md:hidden space-y-4">
+                {filteredCustomers.map(c => (
+                    <Card key={c.id} className="border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-2xl overflow-hidden cursor-pointer hover:shadow-lg transition-shadow" onClick={() => handleCustomerClick(c)}>
+                        <CardContent className="p-6 space-y-4">
+                            <div className="flex items-center gap-3">
+                                <div className="w-12 h-12 rounded-full bg-slate-100 flex items-center justify-center text-slate-500">
+                                    <User className="w-6 h-6" />
+                                </div>
+                                <div className="flex-1">
+                                    <h3 className="font-bold text-slate-800 text-lg">{c.full_name}</h3>
+                                    <div className="text-slate-600 font-medium text-sm mt-1">{c.phone}</div>
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4 pt-4 border-t border-slate-100">
+                                <div>
+                                    <div className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">最終訪問</div>
+                                    <div className="text-slate-600 font-medium">
+                                        {c.last_visit ? format(new Date(c.last_visit), 'yyyy/MM/dd', { locale: ja }) : '未訪問'}
+                                    </div>
+                                </div>
+                                <div>
+                                    <div className="text-xs text-slate-400 font-bold uppercase tracking-wider mb-1">累計LS</div>
+                                    <div className="text-slate-900 font-black">¥{(c.total_spent || 0).toLocaleString()}</div>
+                                </div>
+                            </div>
+                            <Button variant="outline" size="sm" className="w-full rounded-lg border-slate-200 font-bold hover:bg-amber-50 hover:text-amber-600 hover:border-amber-200">詳細を見る</Button>
+                        </CardContent>
+                    </Card>
+                ))}
+                {filteredCustomers.length === 0 && (
+                    <EmptyState
+                        title="一致する顧客データがありません"
+                        description="検索条件を変更して再度お試しください。"
+                        compact
+                    />
+                )}
+            </div>
 
             <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
                 <DialogContent className="max-w-5xl h-[85vh] overflow-y-auto p-0 border-none rounded-3xl shadow-2xl">

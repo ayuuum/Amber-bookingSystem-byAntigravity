@@ -158,18 +158,37 @@ export const AmberErrors = {
         message: 'サーバーエラーが発生しました。しばらく時間をおいて再試行してください。',
         httpStatus: 500,
     }),
+
+    INTERNAL_SERVER_ERROR: (message?: string): AmberError => ({
+        code: 'ERR_INTERNAL',
+        message: message || 'サーバーエラーが発生しました。しばらく時間をおいて再試行してください。',
+        httpStatus: 500,
+    }),
 };
 
 // Helper to create NextResponse from AmberError
 import { NextResponse } from 'next/server';
 
-export function errorResponse(error: AmberError): NextResponse {
+/**
+ * エラーレスポンスを作成
+ * 本番環境では機密情報（スタックトレースなど）を非表示にする
+ * 
+ * @param error - AmberErrorオブジェクト
+ * @param includeStack - スタックトレースを含めるか（デフォルト: false、開発環境のみ）
+ * @returns NextResponse
+ */
+export function errorResponse(error: AmberError, includeStack?: boolean): NextResponse {
+    const isDevelopment = process.env.NODE_ENV === 'development';
+    const shouldIncludeStack = includeStack !== undefined ? includeStack : isDevelopment;
+
     return NextResponse.json(
         {
             error: {
                 code: error.code,
                 message: error.message,
                 ...(error.details && { details: error.details }),
+                // 開発環境のみスタックトレースを含める（本番環境では情報漏洩を防ぐ）
+                ...(shouldIncludeStack && error.details?.stack && { stack: error.details.stack }),
             },
         },
         { status: error.httpStatus }

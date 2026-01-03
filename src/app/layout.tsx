@@ -3,6 +3,7 @@ import { Noto_Sans_JP, Inter } from "next/font/google";
 import "./globals.css";
 import { ChatWidget } from "@/components/ai/ChatWidget";
 import { FloatingLineButton } from "@/components/layout/FloatingLineButton";
+import { CartProvider } from "@/contexts/CartContext";
 
 const notoSansJP = Noto_Sans_JP({
   variable: "--font-noto-sans-jp",
@@ -20,6 +21,7 @@ export const metadata: Metadata = {
 };
 
 import { PWALoader } from "@/components/pwa/pwa-loader";
+import { Toaster } from "@/components/ui/toaster";
 
 export default function RootLayout({
   children,
@@ -35,10 +37,13 @@ export default function RootLayout({
       <body
         className={`${notoSansJP.variable} ${inter.variable} font-sans antialiased`}
       >
-        <PWALoader />
-        {children}
-        <ChatWidget />
-        <FloatingLineButton />
+        <CartProvider>
+          <PWALoader />
+          {children}
+          <ChatWidget />
+          <FloatingLineButton />
+          <Toaster />
+        </CartProvider>
       </body>
     </html>
   );

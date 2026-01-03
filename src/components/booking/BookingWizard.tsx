@@ -11,6 +11,7 @@ import { BookingProgress } from "./BookingProgress";
 import { Button } from "@/components/ui/button";
 import { Form } from "@/components/ui/form";
 import { CartItem } from "@/types/cart";
+import { useToast } from "@/hooks/use-toast";
 
 interface BookingWizardProps {
     slug: string;
@@ -18,6 +19,7 @@ interface BookingWizardProps {
 
 export function BookingWizard({ slug }: BookingWizardProps) {
     const [cart, setCart] = useState<CartItem[]>([]);
+    const { toast } = useToast();
 
     const form = useForm<BookingFormData>({
         resolver: zodResolver(bookingSchema),
@@ -31,7 +33,11 @@ export function BookingWizard({ slug }: BookingWizardProps) {
     const onSubmit = async (data: BookingFormData) => {
         try {
             if (cart.length === 0) {
-                alert("サービスを選択してください");
+                toast({
+                    title: "サービスを選択してください",
+                    description: "予約するサービスをカートに追加してください。",
+                    variant: "destructive",
+                });
                 return;
             }
 
@@ -54,12 +60,20 @@ export function BookingWizard({ slug }: BookingWizardProps) {
                 throw new Error(result.error || 'Booking failed');
             }
 
-            alert("予約が完了しました！");
+            toast({
+                title: "予約が完了しました",
+                description: "予約が正常に登録されました。",
+                variant: "default",
+            });
             window.location.href = '/';
         } catch (error) {
             console.error("Booking Error:", error);
             const message = error instanceof Error ? error.message : "Unknown error";
-            alert(`予約に失敗しました: ${message}`);
+            toast({
+                title: "予約に失敗しました",
+                description: message,
+                variant: "destructive",
+            });
         }
     };
 
@@ -87,9 +101,8 @@ export function BookingWizard({ slug }: BookingWizardProps) {
                     />
 
                     {/* Section 2: Date */}
-                    {/* Note: DateSelection needs update to calculate duration from CART, not serviceId */}
                     <div className="bg-white p-6 rounded-lg shadow-sm border">
-                        <DateSelection form={form} />
+                        <DateSelection form={form} slug={slug} cart={cart} />
                     </div>
 
                     {/* Section 3: Customer Info */}

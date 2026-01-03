@@ -1,4 +1,4 @@
-export type Role = 'org_admin' | 'store_manager' | 'staff' | 'customer';
+export type Role = 'hq_admin' | 'store_admin' | 'field_staff' | 'customer';
 
 export interface Organization {
   id: string;
@@ -33,6 +33,24 @@ export interface Store {
   email: string | null;
   is_archived: boolean;
   settings: Record<string, unknown>;
+  line_channel_access_token: string | null;
+  line_channel_secret: string | null;
+  google_refresh_token: string | null;
+  google_access_token: string | null;
+  google_token_expiry: number | null;
+  created_at: string;
+}
+
+export interface Staff {
+  id: string;
+  organization_id: string;
+  store_id: string;
+  name: string;
+  nomination_fee: number | null;
+  is_active: boolean | null;
+  google_calendar_id: string | null;
+  google_refresh_token: string | null;
+  profile_id: string | null;
   created_at: string;
 }
 

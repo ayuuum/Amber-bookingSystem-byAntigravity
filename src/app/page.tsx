@@ -1,5 +1,6 @@
 import { BookingForm } from "@/components/features/booking/BookingForm";
 import { createClient } from "@/lib/supabase/server";
+import { HeroImage } from "@/components/layout/HeroImage";
 
 export default async function Home() {
     const supabase = await createClient();
@@ -71,13 +72,10 @@ export default async function Home() {
         <div className="min-h-screen bg-background">
             {/* Optimized Hero Section */}
             <div className="relative h-[60vh] min-h-[400px] w-full overflow-hidden">
-                <img
+                <HeroImage
                     src={heroBackgroundImage}
                     alt="Amber House Cleaning"
                     className="absolute inset-0 w-full h-full object-cover"
-                    onError={(e) => {
-                        (e.target as HTMLImageElement).src = "/hero.png";
-                    }}
                 />
                 <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
                 <div className="absolute inset-0 flex items-center justify-center text-center p-4">

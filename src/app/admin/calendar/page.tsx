@@ -27,13 +27,7 @@ export default function CalendarPage() {
 
     useEffect(() => {
         const fetchBookings = async () => {
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/5a01f0f3-d5c2-417b-a9af-69398d1d12dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'calendar/page.tsx:29',message:'fetchBookings started',data:{timestamp:Date.now()},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-            // #endregion
             setLoading(true);
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/5a01f0f3-d5c2-417b-a9af-69398d1d12dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'calendar/page.tsx:31',message:'Before supabase query',data:{supabaseExists:!!supabase},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-            // #endregion
             const { data, error } = await supabase
                 .from('bookings')
                 .select(`
@@ -49,44 +43,22 @@ export default function CalendarPage() {
                 `)
                 .neq('status', 'cancelled');
 
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/5a01f0f3-d5c2-417b-a9af-69398d1d12dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'calendar/page.tsx:47',message:'After supabase query',data:{hasError:!!error,hasData:!!data,errorType:error?.constructor?.name,errorKeys:error?Object.keys(error):[],errorMessage:error?.message,errorCode:error?.code,errorDetails:error?.details,errorHint:error?.hint,dataLength:data?.length,errorStringified:JSON.stringify(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,B,C,D,E'})}).catch(()=>{});
-            // #endregion
-
             // 権限不足・未実装は正常系として扱う（空配列は正常な状態）
             if (error) {
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/5a01f0f3-d5c2-417b-a9af-69398d1d12dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'calendar/page.tsx:50',message:'Error branch entered',data:{errorTruthy:!!error,errorType:typeof error,errorIsObject:typeof error==='object',errorIsNull:error===null,errorIsUndefined:error===undefined},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'B'})}).catch(()=>{});
-                // #endregion
                 const errorMessage = error.message || '';
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/5a01f0f3-d5c2-417b-a9af-69398d1d12dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'calendar/page.tsx:52',message:'Error message extracted',data:{errorMessage,errorMessageLength:errorMessage.length,errorMessageType:typeof errorMessage},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,D'})}).catch(()=>{});
-                // #endregion
                 const isPermissionDenied = errorMessage.includes('permission denied') ||
                     (errorMessage.includes('relation') && errorMessage.includes('does not exist')) ||
                     errorMessage.includes('Could not find');
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/5a01f0f3-d5c2-417b-a9af-69398d1d12dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'calendar/page.tsx:55',message:'Permission check result',data:{isPermissionDenied},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-                // #endregion
                 
                 if (isPermissionDenied) {
                     // 権限不足は正常系として扱う（console.errorは出さない）
-                    // #region agent log
-                    fetch('http://127.0.0.1:7242/ingest/5a01f0f3-d5c2-417b-a9af-69398d1d12dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'calendar/page.tsx:58',message:'Permission denied branch',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'D'})}).catch(()=>{});
-                    // #endregion
                     setBookings([]);
                 } else {
                     // 本当に致命的なエラーのみconsole.error（ネットワーク断など）
-                    // #region agent log
-                    fetch('http://127.0.0.1:7242/ingest/5a01f0f3-d5c2-417b-a9af-69398d1d12dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'calendar/page.tsx:61',message:'Fatal error branch - before console.error',data:{errorObject:error,errorStringified:JSON.stringify(error),errorToString:String(error)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A,E'})}).catch(()=>{});
-                    // #endregion
                     console.error('Error fetching bookings:', error);
                     setBookings([]);
                 }
             } else {
-                // #region agent log
-                fetch('http://127.0.0.1:7242/ingest/5a01f0f3-d5c2-417b-a9af-69398d1d12dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'calendar/page.tsx:66',message:'Success branch entered',data:{dataLength:data?.length,dataType:Array.isArray(data)?'array':typeof data},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});
-                // #endregion
                 // 空配列も正常な状態として扱う（予約0件は正常な状態）
                 const formatted = (data || []).map((b: any) => ({
                     ...b,
@@ -96,9 +68,6 @@ export default function CalendarPage() {
                 setBookings(formatted);
             }
             setLoading(false);
-            // #region agent log
-            fetch('http://127.0.0.1:7242/ingest/5a01f0f3-d5c2-417b-a9af-69398d1d12dc',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'calendar/page.tsx:75',message:'fetchBookings completed',data:{},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'A'})}).catch(()=>{});
-            // #endregion
         };
 
         fetchBookings();

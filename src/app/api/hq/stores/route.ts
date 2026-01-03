@@ -18,7 +18,7 @@ export async function GET(request: NextRequest) {
         // Super Admin チェック
         const { data: { user } } = await supabase.auth.getUser();
         const { data: profile } = await supabase.from('profiles').select('role').eq('id', user?.id).single();
-        if (profile?.role !== 'super_admin') return errorResponse(AmberErrors.FORBIDDEN());
+        if (profile?.role !== 'hq_admin') return errorResponse(AmberErrors.FORBIDDEN());
 
         const { data: stores, error } = await supabase
             .from('stores')
@@ -41,7 +41,7 @@ export async function POST(request: NextRequest) {
         const supabase = await createClient();
         const { data: { user } } = await supabase.auth.getUser();
         const { data: profile } = await supabase.from('profiles').select('role').eq('id', user?.id).single();
-        if (profile?.role !== 'super_admin') return errorResponse(AmberErrors.FORBIDDEN());
+        if (profile?.role !== 'hq_admin') return errorResponse(AmberErrors.FORBIDDEN());
 
         const body = await request.json();
 

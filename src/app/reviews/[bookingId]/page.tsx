@@ -6,6 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { createClient } from "@/lib/supabase/client";
 import { useParams } from "next/navigation";
+import { useToast } from "@/hooks/use-toast";
+import { LoadingState } from "@/components/ui/loading";
 
 export default function ReviewPage() {
     const params = useParams();
@@ -18,6 +20,7 @@ export default function ReviewPage() {
     const [booking, setBooking] = useState<any>(null);
 
     const supabase = createClient();
+    const { toast } = useToast();
 
     useEffect(() => {
         const fetchBooking = async () => {
@@ -34,7 +37,14 @@ export default function ReviewPage() {
     }, [bookingId, supabase]);
 
     const handleSubmit = async () => {
-        if (rating === 0) return alert("評価を選択してください");
+        if (rating === 0) {
+            toast({
+                title: "評価を選択してください",
+                description: "星を選択して評価を入力してください。",
+                variant: "destructive",
+            });
+            return;
+        }
 
         const { error: insertError } = await supabase.from('reviews').insert({
             booking_id: bookingId,
@@ -45,7 +55,7 @@ export default function ReviewPage() {
         if (!insertError) setSubmitted(true);
     };
 
-    if (loading) return <div className="min-h-screen flex items-center justify-center bg-slate-50">Loading...</div>;
+    if (loading) return <LoadingState message="読み込み中..." className="min-h-screen" />;
 
     if (submitted) {
         return (

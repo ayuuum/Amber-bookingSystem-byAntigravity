@@ -325,30 +325,6 @@ async function getHandler(request: NextRequest, context: ApiContext) {
         });
 
     } catch (error: unknown) {
-        // #region agent log
-        const logData = {
-            location: 'api/admin/stats/route.ts:327',
-            message: 'Catch block entered',
-            data: {
-                errorType: error instanceof Error ? error.constructor.name : typeof error,
-                errorMessage: error instanceof Error ? error.message : String(error),
-                errorStack: error instanceof Error ? error.stack : undefined,
-                errorStringified: JSON.stringify(error),
-            },
-            timestamp: Date.now(),
-            sessionId: 'debug-session',
-            runId: 'run1',
-            hypothesisId: 'A,C,E'
-        };
-        try {
-            await fetch('http://127.0.0.1:7242/ingest/5a01f0f3-d5c2-417b-a9af-69398d1d12dc', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(logData)
-            }).catch(() => {});
-        } catch {}
-        // #endregion
-        
         // 権限不足・未実装は正常系として扱う（空のstatsを返す）
         // SupabaseのエラーオブジェクトはErrorインスタンスではないため、適切に処理する
         let errorMessage: string;
@@ -360,27 +336,6 @@ async function getHandler(request: NextRequest, context: ApiContext) {
         } else {
             errorMessage = String(error);
         }
-        // #region agent log
-        const logData2 = {
-            location: 'api/admin/stats/route.ts:350',
-            message: 'Error message extracted',
-            data: {
-                errorMessage,
-                errorMessageType: typeof errorMessage,
-            },
-            timestamp: Date.now(),
-            sessionId: 'debug-session',
-            runId: 'run1',
-            hypothesisId: 'A,C'
-        };
-        try {
-            await fetch('http://127.0.0.1:7242/ingest/5a01f0f3-d5c2-417b-a9af-69398d1d12dc', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(logData2)
-            }).catch(() => {});
-        } catch {}
-        // #endregion
         
         if (errorMessage.includes('permission denied') || 
             (errorMessage.includes('relation') && errorMessage.includes('does not exist')) ||
@@ -389,24 +344,6 @@ async function getHandler(request: NextRequest, context: ApiContext) {
             logger.debug('[Admin Stats] Query failed due to RLS (expected)', { 
                 error: errorMessage 
             });
-            // #region agent log
-            const logData3 = {
-                location: 'api/admin/stats/route.ts:360',
-                message: 'Permission denied branch - returning empty stats',
-                data: {},
-                timestamp: Date.now(),
-                sessionId: 'debug-session',
-                runId: 'run1',
-                hypothesisId: 'D'
-            };
-            try {
-                await fetch('http://127.0.0.1:7242/ingest/5a01f0f3-d5c2-417b-a9af-69398d1d12dc', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify(logData3)
-                }).catch(() => {});
-            } catch {}
-            // #endregion
             return NextResponse.json({
                 sales: { currentMonth: 0 },
                 bookings: { currentMonth: 0 },
@@ -424,29 +361,7 @@ async function getHandler(request: NextRequest, context: ApiContext) {
             error: errorMessage,
             stack: error instanceof Error ? error.stack : undefined
         });
-        // #region agent log
-        const errorResponseObj = errorResponse(AmberErrors.INTERNAL_ERROR());
-        const logData4 = {
-            location: 'api/admin/stats/route.ts:380',
-            message: 'Fatal error branch - before errorResponse',
-            data: {
-                errorResponseStatus: errorResponseObj.status,
-                errorResponseStatusText: errorResponseObj.statusText,
-            },
-            timestamp: Date.now(),
-            sessionId: 'debug-session',
-            runId: 'run1',
-            hypothesisId: 'A,E'
-        };
-        try {
-            await fetch('http://127.0.0.1:7242/ingest/5a01f0f3-d5c2-417b-a9af-69398d1d12dc', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(logData4)
-            }).catch(() => {});
-        } catch {}
-        // #endregion
-        return errorResponseObj;
+        return errorResponse(AmberErrors.INTERNAL_ERROR());
     }
 }
 

@@ -15,6 +15,7 @@ import { CartItem } from "@/types/cart";
 import { Service } from "@/types";
 import { createClient } from "@/lib/supabase/client";
 import { useToast } from "@/hooks/use-toast";
+import { useCart } from "@/contexts/CartContext";
 
 interface ThemeSettings {
     primary_color: string;
@@ -36,13 +37,22 @@ const DEFAULT_THEME: ThemeSettings = {
     hero_background_image: "/hero.png",
 };
 
+interface LineProfile {
+    userId: string;
+    displayName: string;
+    pictureUrl?: string;
+}
+
 interface BookingFormProps {
     orgSlug: string;
     storeSlug: string;
+    lineProfile?: LineProfile | null;
+    idToken?: string | null;
+    onComplete?: (booking: any) => void;
 }
 
-export function BookingForm({ orgSlug, storeSlug }: BookingFormProps) {
-    const [cart, setCart] = useState<CartItem[]>([]);
+export function BookingForm({ orgSlug, storeSlug, lineProfile, idToken, onComplete }: BookingFormProps) {
+    const { cart, updateCartItem, addToCart, removeFromCart, setStoreSlug } = useCart();
     const [theme, setTheme] = useState<ThemeSettings>(DEFAULT_THEME);
     const [services, setServices] = useState<Service[]>([]);
     const [staffList, setStaffList] = useState<any[]>([]);
@@ -50,6 +60,49 @@ export function BookingForm({ orgSlug, storeSlug }: BookingFormProps) {
 
     const supabase = createClient();
     const { toast } = useToast();
+
+    // storeSlugをコンテキストに設定
+    useEffect(() => {
+        setStoreSlug(storeSlug);
+    }, [storeSlug, setStoreSlug]);
+
+    // LINEプロフィールがある場合は顧客名を自動入力
+    useEffect(() => {
+        if (lineProfile?.displayName) {
+            // displayNameを姓と名に分割（スペースで区切る、なければ全てを姓に）
+            const nameParts = lineProfile.displayName.trim().split(/\s+/);
+            if (nameParts.length >= 2) {
+                form.setValue('lastName', nameParts[0]);
+                form.setValue('firstName', nameParts.slice(1).join(' '));
+            } else {
+                form.setValue('lastName', lineProfile.displayName);
+                form.setValue('firstName', '');
+            }
+        }
+    }, [lineProfile, form]);
+
+    // カート更新関数（ServiceCartコンポーネント用）
+    const handleUpdateCart = (newCart: CartItem[]) => {
+        // カート全体を置き換える（各アイテムを更新）
+        const currentCartMap = new Map(cart.map(item => [item.serviceId, item]));
+        const newCartMap = new Map(newCart.map(item => [item.serviceId, item]));
+
+        // 削除されたアイテムを処理
+        currentCartMap.forEach((item, serviceId) => {
+            if (!newCartMap.has(serviceId)) {
+                removeFromCart(serviceId);
+            }
+        });
+
+        // 追加・更新されたアイテムを処理
+        newCartMap.forEach((item) => {
+            if (currentCartMap.has(item.serviceId)) {
+                updateCartItem(item);
+            } else {
+                addToCart(item);
+            }
+        });
+    };
 
     useEffect(() => {
         const fetchInitialData = async () => {
@@ -108,6 +161,8 @@ export function BookingForm({ orgSlug, storeSlug }: BookingFormProps) {
                 storeSlug,
                 orgSlug,
                 slug: storeSlug, // Add slug specifically for existing API
+                idToken: idToken || null, // IDトークンを追加
+                line_user_id: lineProfile?.userId || null, // LINEユーザーIDを追加
             };
 
             const response = await fetch('/api/bookings', {
@@ -147,7 +202,13 @@ export function BookingForm({ orgSlug, storeSlug }: BookingFormProps) {
                 description: "LINEで通知が届きます。",
                 variant: "default",
             });
-            window.location.href = '/success';
+
+            // onCompleteコールバックが指定されている場合は呼び出す
+            if (onComplete) {
+                onComplete(result);
+            } else {
+                window.location.href = '/success';
+            }
         } catch (error) {
             console.error("Booking Error:", error);
             const message = error instanceof Error ? error.message : "Unknown error";
@@ -210,7 +271,7 @@ export function BookingForm({ orgSlug, storeSlug }: BookingFormProps) {
                         <ServiceCart
                             slug={storeSlug}
                             cart={cart}
-                            onUpdateCart={setCart}
+                            onUpdateCart={handleUpdateCart}
                             initialServices={services}
                             error={form.formState.errors.serviceId?.message}
                         />

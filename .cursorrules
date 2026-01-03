@@ -1,0 +1,46 @@
+# Cursor Project Rules
+
+## イベント駆動アーキテクチャ
+
+- イベント発行: `publishEvent()` は必ず `await` していること
+- イベント処理: 外部連携（LINE通知、Google Calendar同期）はイベントハンドラーで処理すること
+- デュアルモード: 環境変数 `USE_EVENT_SYSTEM` で制御（`true` でイベント駆動、`false` で既存の同期処理）
+
+## 再試行ロジック
+
+- 再試行設定: `ERROR_RETRY_POLICY` から取得していること
+- エラータイプ判定: `getRetryPolicy()` を使用してエラータイプに応じた再試行戦略を取得
+- 再試行関数: `retryWithBackoff()` を使用すること
+
+## 観察記録
+
+- 失敗時: `recordEventObservation()` を呼ぶこと
+- 成功時: 処理時間、外部API別レイテンシーを記録すること
+- エラータイプ: `error_type` と `failure_point` を記録すること
+
+## 新しい外部 API を追加する際のチェックリスト
+
+1. `ERROR_RETRY_POLICY` に該当のエラータイプを追加
+2. `EVENT_HANDLERS_CONFIG` に SLA を設定
+3. ハンドラー内で `recordEventObservation()` で失敗を記録
+4. 再試行ロジックを `retryWithBackoff()` で実装
+
+## イベントハンドラー実装
+
+- ハンドラー名: `EVENT_HANDLERS_CONFIG` で定義された名前を使用
+- 観察記録: 各ハンドラーの実行結果を `recordEventObservation()` で記録
+- エラーハンドリング: ハンドラーの失敗はイベント処理を阻害しない（ログのみ記録）
+
+## Dead Letter Queue (DLQ)
+
+- 最大再試行回数超過時: `moveToDLQ()` でDLQへ移動
+- DLQ監視: `/api/events/dlq` エンドポイントで確認
+- 手動再処理: DLQ内のイベントは管理者が確認後に再処理可能
+
+## 設計原則への準拠
+
+- 原則4（失敗を通常状態として扱う）: 再試行ロジック、DLQ、観察記録で対応
+- 原則5（事実に反応する）: イベント駆動アーキテクチャ、観察記録で対応
+- 原則3（最終的な正しさを優先）: 外部連携の失敗が予約作成を阻害しない
+
+

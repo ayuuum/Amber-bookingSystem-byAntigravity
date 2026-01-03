@@ -48,7 +48,7 @@ export function ServiceCartItem({ service, cartItem, onUpdate }: ServiceCartItem
                     <div className="w-full sm:w-32 h-32 bg-gray-200 flex-shrink-0 relative">
                         {/* Placeholder or Image */}
                         {service.image_url ? (
-                            <img src={service.image_url} alt={service.name} className="w-full h-full object-cover" />
+                            <img src={service.image_url} alt={service.title} className="w-full h-full object-cover" />
                         ) : (
                             <div className="w-full h-full flex items-center justify-center text-gray-400 text-xs">No Image</div>
                         )}
@@ -63,7 +63,7 @@ export function ServiceCartItem({ service, cartItem, onUpdate }: ServiceCartItem
                     <div className="flex-1 p-4 flex flex-col justify-between">
                         <div>
                             <div className="flex justify-between items-start mb-1">
-                                <h3 className="font-bold text-lg">{service.name}</h3>
+                                <h3 className="font-bold text-lg">{service.title}</h3>
                                 <div className="text-right">
                                     <span className="font-bold text-lg">¥{service.price.toLocaleString()}</span>
                                     <span className="text-xs text-gray-500 block">{service.duration_minutes}分</span>

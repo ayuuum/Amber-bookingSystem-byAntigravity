@@ -26,7 +26,7 @@ export async function GET(request: NextRequest) {
             .eq('id', user.id)
             .single();
 
-        if (profile?.role !== 'super_admin') {
+        if (profile?.role !== 'hq_admin') {
             return errorResponse(AmberErrors.FORBIDDEN());
         }
 

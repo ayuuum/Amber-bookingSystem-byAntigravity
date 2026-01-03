@@ -18,7 +18,7 @@ export async function POST(req: Request) {
             .eq('id', user.id)
             .single();
 
-        if (!profile || profile.role !== 'org_admin') {
+        if (!profile || profile.role !== 'hq_admin') {
             return NextResponse.json({ error: 'Permission denied' }, { status: 403 });
         }
 

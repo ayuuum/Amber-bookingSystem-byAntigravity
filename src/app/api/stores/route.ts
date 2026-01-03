@@ -1,69 +1,63 @@
-import { createClient } from '@/lib/supabase/server';
 import { checkResourceLimit } from '@/lib/plan/access';
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
+import { withAuth, ApiContext } from '@/lib/api/middleware';
+import { AmberErrors, errorResponse } from '@/lib/errors';
 
-export async function POST(req: Request) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+async function postHandler(request: NextRequest, context: ApiContext) {
+    const { supabase, user } = context;
 
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-
-    // 1. Get User Profile & Org
-    const { data: profile } = await supabase.from('profiles').select('organization_id').eq('id', user.id).single();
-    if (!profile?.organization_id) return NextResponse.json({ error: 'No organization' }, { status: 403 });
-
-    try {
-        const body = await req.json();
-        const { name, slug, address } = body;
-
-        // 2. Plan Guard: Check Store Limit
-        const { allowed, current, limit } = await checkResourceLimit(profile.organization_id, 'stores');
-
-        if (!allowed) {
-            return NextResponse.json({
-                error: 'PLAN_LIMIT_REACHED',
-                message: `現在のプランの店舗数上限（${limit}店舗）に達しています。上位プランへのアップグレードをご検討ください。`,
-                current,
-                limit
-            }, { status: 403 });
-        }
-
-        // 3. Create Store
-        const { data: store, error: createError } = await supabase
-            .from('stores')
-            .insert({
-                name,
-                slug,
-                address,
-                organization_id: profile.organization_id
-            })
-            .select()
-            .single();
-
-        if (createError) throw createError;
-
-        return NextResponse.json(store);
-
-    } catch (error: any) {
-        console.error('Create Store Error:', error);
-        return NextResponse.json({ error: error.message || 'Internal Error' }, { status: 500 });
+    if (!user.organizationId) {
+        return errorResponse(AmberErrors.FORBIDDEN());
     }
+
+    const body = await request.json();
+    const { name, slug, address } = body;
+
+    // Plan Guard: Check Store Limit
+    const { allowed, current, limit } = await checkResourceLimit(user.organizationId, 'stores');
+
+    if (!allowed) {
+        return errorResponse(AmberErrors.PLAN_STORE_LIMIT(current, limit));
+    }
+
+    // Create Store
+    const { data: store, error: createError } = await supabase
+        .from('stores')
+        .insert({
+            name,
+            slug,
+            address,
+            organization_id: user.organizationId
+        })
+        .select()
+        .single();
+
+    if (createError) {
+        return errorResponse(AmberErrors.DATABASE_ERROR(createError.message));
+    }
+
+    return NextResponse.json(store);
 }
 
-export async function GET(req: Request) {
-    const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+async function getHandler(request: NextRequest, context: ApiContext) {
+    const { supabase, user } = context;
 
-    if (!user) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    if (!user.organizationId) {
+        return NextResponse.json([]);
+    }
 
-    const { data: profile } = await supabase.from('profiles').select('organization_id').eq('id', user.id).single();
-    if (!profile?.organization_id) return NextResponse.json([]);
-
-    const { data: stores } = await supabase
+    const { data: stores, error } = await supabase
         .from('stores')
         .select('*')
-        .eq('organization_id', profile.organization_id)
+        .eq('organization_id', user.organizationId)
         .order('created_at', { ascending: true });
+
+    if (error) {
+        return errorResponse(AmberErrors.DATABASE_ERROR());
+    }
 
     return NextResponse.json(stores || []);
 }
+
+export const POST = withAuth(postHandler);
+export const GET = withAuth(getHandler);

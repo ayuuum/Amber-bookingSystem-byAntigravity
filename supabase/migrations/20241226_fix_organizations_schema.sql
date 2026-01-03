@@ -171,3 +171,14 @@ CREATE TRIGGER trigger_update_organizations_updated_at
     FOR EACH ROW
     EXECUTE FUNCTION public.update_organizations_updated_at();
 
+
+
+
+
+
+
+
+
+
+
+

@@ -1,5 +1,7 @@
 import { createClient } from '@/lib/supabase/server';
 import { NextResponse } from 'next/server';
+import { AmberErrors, errorResponse } from '@/lib/errors';
+import { logger } from '@/lib/logger';
 
 export async function POST(request: Request) {
     try {
@@ -8,13 +10,13 @@ export async function POST(request: Request) {
         const { message, userId } = body;
 
         if (!message) {
-            return NextResponse.json({ error: 'Message is required' }, { status: 400 });
+            return errorResponse(AmberErrors.VALIDATION_ERROR('Message is required'));
         }
 
         // 1. Context Retrieval (Mock RAG)
         // In real implementation, we would search pgvector here.
         // const { data: context } = await supabase.rpc('match_documents', { query_embedding: ... });
-        console.log(`[AI Agent] Retrieving context for user: ${userId}`);
+        logger.debug('AI Agent retrieving context', { userId });
 
         // 2. LLM Processing (Mock)
         // const completion = await openai.chat.completions.create({ ... });
@@ -28,8 +30,8 @@ export async function POST(request: Request) {
             action: null
         });
 
-    } catch (error) {
-        console.error('[AI Agent] Error:', error);
-        return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    } catch (error: any) {
+        logger.error('AI Agent error', { error });
+        return errorResponse(AmberErrors.INTERNAL_ERROR());
     }
 }

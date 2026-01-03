@@ -19,11 +19,12 @@ import { Profile, Store as StoreType } from '@/types';
 import { Badge } from '@/components/ui/badge';
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { useToast } from "@/hooks/use-toast";
 
 const ROLE_LABELS: Record<string, { label: string, color: string, icon: any }> = {
-    org_admin: { label: '組織管理者', color: 'bg-slate-900', icon: Shield },
-    store_manager: { label: '店長', color: 'bg-amber-600', icon: Store },
-    staff: { label: 'スタッフ', color: 'bg-emerald-600', icon: User },
+    hq_admin: { label: '本部管理者', color: 'bg-slate-900', icon: Shield },
+    store_admin: { label: '店舗管理者', color: 'bg-amber-600', icon: Store },
+    field_staff: { label: '現場スタッフ', color: 'bg-emerald-600', icon: User },
     customer: { label: '顧客', color: 'bg-slate-400', icon: User }
 };
 
@@ -32,34 +33,100 @@ export default function AdminStaffPage() {
     const [stores, setStores] = useState<StoreType[]>([]);
     const [loading, setLoading] = useState(true);
     const [isInviteOpen, setIsInviteOpen] = useState(false);
-    const [inviteForm, setInviteForm] = useState({ email: '', role: 'staff', store_id: '' });
+    const [inviteForm, setInviteForm] = useState({ email: '', role: 'field_staff', store_id: '' });
 
     const supabase = createClient();
+    const { toast } = useToast();
 
     const fetchData = useCallback(async () => {
         setLoading(true);
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
+        try {
+            const { data: { user }, error: userError } = await supabase.auth.getUser();
+            
+            // Network errors should not trigger state updates
+            if (userError) {
+                if (userError.message?.includes('Failed to fetch') || 
+                    userError.message?.includes('NetworkError') ||
+                    userError.name === 'NetworkError') {
+                    console.error('[StaffPage] Network error during auth check:', userError.message);
+                    setLoading(false);
+                    return;
+                }
+            }
 
-        const { data: profile } = await supabase.from('profiles').select('organization_id').eq('id', user.id).single();
-        if (!profile?.organization_id) return;
+            if (!user) {
+                setLoading(false);
+                return;
+            }
 
-        // Fetch all users in org
-        const { data: members } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('organization_id', profile.organization_id)
-            .order('role', { ascending: true });
+            const { data: profile, error: profileError } = await supabase
+                .from('profiles')
+                .select('organization_id')
+                .eq('id', user.id)
+                .single();
 
-        // Fetch stores for manager assignment
-        const { data: storeList } = await supabase
-            .from('stores')
-            .select('*')
-            .eq('organization_id', profile.organization_id);
+            // Network errors on profile fetch should not trigger state updates
+            if (profileError) {
+                if (profileError.message?.includes('Failed to fetch') || 
+                    profileError.message?.includes('NetworkError')) {
+                    console.error('[StaffPage] Network error during profile check:', profileError.message);
+                    setLoading(false);
+                    return;
+                }
+            }
 
-        if (members) setUsers(members as Profile[]);
-        if (storeList) setStores(storeList as StoreType[]);
-        setLoading(false);
+            if (!profile?.organization_id) {
+                setLoading(false);
+                return;
+            }
+
+            // Fetch all users in org
+            const { data: members, error: membersError } = await supabase
+                .from('profiles')
+                .select('*')
+                .eq('organization_id', profile.organization_id)
+                .order('role', { ascending: true });
+
+            // Network errors on members fetch should not trigger state updates
+            if (membersError) {
+                if (membersError.message?.includes('Failed to fetch') || 
+                    membersError.message?.includes('NetworkError')) {
+                    console.error('[StaffPage] Network error during members fetch:', membersError.message);
+                    setLoading(false);
+                    return;
+                }
+            }
+
+            // Fetch stores for manager assignment
+            const { data: storeList, error: storesError } = await supabase
+                .from('stores')
+                .select('*')
+                .eq('organization_id', profile.organization_id);
+
+            // Network errors on stores fetch should not trigger state updates
+            if (storesError) {
+                if (storesError.message?.includes('Failed to fetch') || 
+                    storesError.message?.includes('NetworkError')) {
+                    console.error('[StaffPage] Network error during stores fetch:', storesError.message);
+                    setLoading(false);
+                    return;
+                }
+            }
+
+            if (members) setUsers(members as Profile[]);
+            if (storeList) setStores(storeList as StoreType[]);
+        } catch (error: any) {
+            // Catch network errors and other unexpected errors
+            if (error?.message?.includes('Failed to fetch') || 
+                error?.name === 'TypeError' ||
+                error?.message?.includes('network')) {
+                console.error('[StaffPage] Network error during data fetch:', error.message);
+            } else {
+                console.error('[StaffPage] Failed to fetch data:', error);
+            }
+        } finally {
+            setLoading(false);
+        }
     }, [supabase]);
 
     useEffect(() => {
@@ -68,10 +135,53 @@ export default function AdminStaffPage() {
 
     const handleInvite = async () => {
         if (!inviteForm.email) return;
-        // In a real app, this calls an API to send invite or create user
-        alert(`招待を送信しました: ${inviteForm.email} (${inviteForm.role})\n※ JWT同期トリガーにより次回ログイン時から権限が有効になります。`);
-        setIsInviteOpen(false);
-        setInviteForm({ email: '', role: 'staff', store_id: '' });
+
+        try {
+            const res = await fetch('/api/admin/invite', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    email: inviteForm.email,
+                    role: inviteForm.role,
+                    storeId: inviteForm.store_id || null,
+                }),
+            });
+
+            const data = await res.json();
+
+            if (!res.ok) {
+                toast({
+                    title: "招待送信に失敗しました",
+                    description: data.error || "エラーが発生しました",
+                    variant: "destructive",
+                });
+                return;
+            }
+
+            // Show invite URL for development (in production, email is sent automatically)
+            if (data.inviteUrl) {
+                toast({
+                    title: "招待が作成されました",
+                    description: `招待URL: ${data.inviteUrl}（開発環境: このURLをコピーして招待先に送信してください）`,
+                    variant: "default",
+                });
+            } else {
+                toast({
+                    title: "招待が正常に送信されました",
+                    description: "招待メールを送信しました。",
+                    variant: "default",
+                });
+            }
+            setIsInviteOpen(false);
+            setInviteForm({ email: '', role: 'staff', store_id: '' });
+            fetchData(); // Refresh the list
+        } catch (error: any) {
+            toast({
+                title: "招待送信に失敗しました",
+                description: error.message || "エラーが発生しました",
+                variant: "destructive",
+            });
+        }
     };
 
     if (loading) return (
@@ -150,7 +260,7 @@ export default function AdminStaffPage() {
                                     </div>
                                     <div className="text-slate-600 font-medium">{member.phone || '未登録'}</div>
                                 </div>
-                                {member.role === 'store_manager' && (
+                                {member.role === 'store_admin' && (
                                     <div className="p-4 bg-amber-50 rounded-2xl border border-amber-100/50 mt-4">
                                         <div className="flex items-center justify-between mb-2">
                                             <span className="text-[10px] uppercase font-black text-amber-600 tracking-widest">Assigned Store</span>
@@ -197,13 +307,13 @@ export default function AdminStaffPage() {
                                     <SelectValue />
                                 </SelectTrigger>
                                 <SelectContent className="rounded-2xl border-slate-100 shadow-xl">
-                                    <SelectItem value="staff" className="font-bold py-3 rounded-xl focus:bg-slate-50">スタッフ（自分の予約のみ）</SelectItem>
-                                    <SelectItem value="store_manager" className="font-bold py-3 rounded-xl focus:bg-slate-50">店長（特定店舗の全管理）</SelectItem>
-                                    <SelectItem value="org_admin" className="font-bold py-3 rounded-xl focus:bg-slate-50 text-amber-600">組織管理者（全店舗の全権限）</SelectItem>
+                                    <SelectItem value="field_staff" className="font-bold py-3 rounded-xl focus:bg-slate-50">現場スタッフ（自分の予約のみ）</SelectItem>
+                                    <SelectItem value="store_admin" className="font-bold py-3 rounded-xl focus:bg-slate-50">店舗管理者（特定店舗の全管理）</SelectItem>
+                                    <SelectItem value="hq_admin" className="font-bold py-3 rounded-xl focus:bg-slate-50 text-amber-600">本部管理者（全店舗の全権限）</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
-                        {inviteForm.role === 'store_manager' && (
+                        {inviteForm.role === 'store_admin' && (
                             <div className="space-y-2 animate-in fade-in slide-in-from-top-2">
                                 <Label className="text-xs font-black uppercase tracking-widest text-slate-400">Assign Store</Label>
                                 <Select value={inviteForm.store_id} onValueChange={(val) => setInviteForm({ ...inviteForm, store_id: val })}>

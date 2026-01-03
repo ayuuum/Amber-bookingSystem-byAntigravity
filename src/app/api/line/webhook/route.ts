@@ -39,19 +39,19 @@ export async function POST(req: Request) {
             const displayName = profile.displayName || 'LINE User';
 
             // 2. Upsert Customer
-            // Check if exists
             const { data: existing } = await supabase.from('customers').select('id').eq('line_user_id', userId).single();
 
             if (!existing) {
-                // Get Store ID (MVP: First store)
-                const { data: store } = await supabase.from('stores').select('id').limit(1).single();
+                // Get Store and Organization (MVP: First store)
+                const { data: store } = await supabase.from('stores').select('id, organization_id').limit(1).single();
 
                 if (store) {
                     await supabase.from('customers').insert({
                         store_id: store.id,
+                        organization_id: store.organization_id,
                         line_user_id: userId,
-                        name: displayName,
-                        phone: 'LINE_Linked', // Placeholder until real booking
+                        full_name: displayName,
+                        phone: 'LINE_Linked',
                         address: null
                     });
                 }
@@ -72,6 +72,31 @@ export async function POST(req: Request) {
                             text: '友だち追加ありがとうございます！\nご予約はこちらから可能です。'
                         }]
                     })
+                });
+            }
+        }
+
+        // Handle incoming messages
+        else if (event.type === 'message' && event.message.type === 'text') {
+            const userId = event.source.userId;
+            const text = event.message.text;
+            const messageId = event.message.id;
+
+            // 1. Find Customer and Organization
+            const { data: customer } = await supabase
+                .from('customers')
+                .select('id, organization_id')
+                .eq('line_user_id', userId)
+                .single();
+
+            if (customer) {
+                // 2. Store Message in line_messages
+                await supabase.from('line_messages').insert({
+                    organization_id: customer.organization_id,
+                    customer_id: customer.id,
+                    sender_type: 'customer',
+                    content: text,
+                    message_id: messageId
                 });
             }
         }

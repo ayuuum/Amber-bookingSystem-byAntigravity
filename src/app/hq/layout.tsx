@@ -1,7 +1,6 @@
 import React from 'react';
 import { redirect } from 'next/navigation';
 import { createClient } from '@/lib/supabase/server';
-import AdminNavbar from '@/components/layout/AdminNavbar'; // 既存のコンポーネントを流用
 
 export default async function HQLayout({
     children,
@@ -9,21 +8,56 @@ export default async function HQLayout({
     children: React.ReactNode;
 }) {
     const supabase = await createClient();
-    const { data: { user } } = await supabase.auth.getUser();
+    
+    try {
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
 
-    if (!user) {
+        // Network errors in server components are rare, but handle gracefully
+        if (authError) {
+            if (authError.message?.includes('Failed to fetch') || 
+                authError.message?.includes('NetworkError') ||
+                authError.name === 'NetworkError') {
+                console.error('[HQLayout] Network error during auth check:', authError.message);
+                // On network errors, redirect to login to prevent infinite loops
+                redirect('/login');
+            }
+            // Other auth errors should redirect
+            redirect('/login');
+        }
+
+        if (!user) {
+            redirect('/login');
+        }
+
+        // 権限チェック
+        const { data: profile, error: profileError } = await supabase
+            .from('profiles')
+            .select('role')
+            .eq('id', user.id)
+            .single();
+
+        // Network errors on profile fetch should redirect to prevent issues
+        if (profileError) {
+            if (profileError.message?.includes('Failed to fetch') || 
+                profileError.message?.includes('NetworkError')) {
+                console.error('[HQLayout] Network error during profile check:', profileError.message);
+                redirect('/login');
+            }
+        }
+
+        if (profile?.role !== 'hq_admin') {
+            redirect('/admin'); // 店舗管理者画面へリダイレクト
+        }
+    } catch (err: any) {
+        // Catch any unexpected errors
+        if (err?.message?.includes('Failed to fetch') || 
+            err?.name === 'TypeError' ||
+            err?.message?.includes('network')) {
+            console.error('[HQLayout] Network error during auth check:', err.message);
+        } else {
+            console.error('[HQLayout] Auth check error:', err);
+        }
         redirect('/login');
-    }
-
-    // 権限チェック
-    const { data: profile } = await supabase
-        .from('profiles')
-        .select('role')
-        .eq('id', user.id)
-        .single();
-
-    if (profile?.role !== 'super_admin') {
-        redirect('/admin'); // 店舗管理者画面へリダイレクト
     }
 
     return (

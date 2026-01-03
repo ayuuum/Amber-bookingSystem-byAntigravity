@@ -26,19 +26,19 @@ export function Confirmation({ form }: ConfirmationProps) {
                         </div>
                         <div>
                             <p className="text-gray-500 font-medium">お名前</p>
-                            <p>{values.customerName}</p>
+                            <p>{values.lastName} {values.firstName}</p>
                         </div>
                         <div>
                             <p className="text-gray-500 font-medium">メールアドレス</p>
-                            <p>{values.customerEmail}</p>
+                            <p>{values.email}</p>
                         </div>
                         <div>
                             <p className="text-gray-500 font-medium">電話番号</p>
-                            <p>{values.customerPhone}</p>
+                            <p>{values.phone}</p>
                         </div>
                         <div>
                             <p className="text-gray-500 font-medium">住所</p>
-                            <p>{values.customerAddress}</p>
+                            <p>{values.address}</p>
                         </div>
                     </div>
                     {values.notes && (

@@ -4,10 +4,10 @@ import { useEffect, useState } from 'react';
 import { createClient } from '@/lib/supabase/client';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend } from 'recharts';
+import { Area, AreaChart, CartesianGrid, XAxis, YAxis, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell, Legend, LineChart, Line } from 'recharts';
 import { startOfMonth, endOfMonth, eachDayOfInterval, format, isSameDay } from 'date-fns';
 import { ja } from 'date-fns/locale';
-import { CreditCard, CalendarCheck, TrendingUp, Users, PieChart as PieChartIcon } from 'lucide-react';
+import { CreditCard, CalendarCheck, TrendingUp, Users, PieChart as PieChartIcon, Repeat } from 'lucide-react';
 
 const COLORS = ['#F59E0B', '#10B981', '#3B82F6', '#6366F1', '#EC4899'];
 const CHANNEL_LABELS: Record<string, string> = {
@@ -18,6 +18,21 @@ const CHANNEL_LABELS: Record<string, string> = {
     other: 'その他'
 };
 
+interface RetentionMetrics {
+    total_customers: number;
+    repeat_customers: number;
+    repeat_rate: number;
+    average_ltv: number;
+    total_revenue: number;
+}
+
+interface RetentionData {
+    metrics: RetentionMetrics;
+    charts: {
+        retention: Array<{ month: string; rate: number }>;
+    };
+}
+
 export default function AnalyticsPage() {
     const [loading, setLoading] = useState(true);
     const [salesData, setSalesData] = useState<any[]>([]);
@@ -25,12 +40,37 @@ export default function AnalyticsPage() {
     const [storeData, setStoreData] = useState<any[]>([]);
     const [totalSales, setTotalSales] = useState(0);
     const [totalBookings, setTotalBookings] = useState(0);
+    const [retentionData, setRetentionData] = useState<RetentionData | null>(null);
+    const [storeId, setStoreId] = useState<string | null>(null);
 
     const supabase = createClient();
 
     useEffect(() => {
         const fetchData = async () => {
             setLoading(true);
+
+            // 1. Get user's organization and first store
+            const { data: { user } } = await supabase.auth.getUser();
+            if (user) {
+                const { data: profile } = await supabase
+                    .from('profiles')
+                    .select('organization_id')
+                    .eq('id', user.id)
+                    .single();
+
+                if (profile?.organization_id) {
+                    const { data: stores } = await supabase
+                        .from('stores')
+                        .select('id')
+                        .eq('organization_id', profile.organization_id)
+                        .limit(1)
+                        .maybeSingle();
+
+                    if (stores) {
+                        setStoreId(stores.id);
+                    }
+                }
+            }
 
             const now = new Date();
             const start = startOfMonth(now);
@@ -78,11 +118,31 @@ export default function AnalyticsPage() {
                 });
                 setStoreData(Object.entries(storeStats).map(([name, sales]) => ({ name, sales })).sort((a: any, b: any) => b.sales - a.sales));
             }
+
             setLoading(false);
         };
 
         fetchData();
     }, [supabase]);
+
+    // Fetch Retention Data separately when storeId is available
+    useEffect(() => {
+        if (!storeId) return;
+
+        const fetchRetention = async () => {
+            try {
+                const retentionRes = await fetch(`/api/admin/analytics/retention?store_id=${storeId}`);
+                if (retentionRes.ok) {
+                    const retention = await retentionRes.json();
+                    setRetentionData(retention);
+                }
+            } catch (error) {
+                console.error('Error fetching retention data:', error);
+            }
+        };
+
+        fetchRetention();
+    }, [storeId]);
 
     if (loading) return (
         <div className="flex items-center justify-center min-h-[400px]">
@@ -231,6 +291,124 @@ export default function AnalyticsPage() {
                     </CardContent>
                 </Card>
             </div>
+
+            {/* Retention Analysis Section */}
+            {retentionData && (
+                <div className="space-y-6">
+                    <div className="flex items-center gap-3">
+                        <div className="w-2 h-10 bg-emerald-500 rounded-full" />
+                        <h2 className="text-3xl font-extrabold text-slate-900 tracking-tight">顧客リテンション分析</h2>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+                        <Card className="border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-3xl overflow-hidden bg-emerald-50">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-xs uppercase font-black text-emerald-700/60 tracking-widest flex items-center gap-2">
+                                    <Users className="w-4 h-4 text-emerald-600" />
+                                    Total Customers
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-4xl font-black text-slate-900 leading-none">
+                                    {retentionData.metrics.total_customers.toLocaleString()}
+                                </div>
+                                <p className="mt-4 text-slate-500 text-xs font-medium">全顧客数</p>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-3xl overflow-hidden bg-blue-50">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-xs uppercase font-black text-blue-700/60 tracking-widest flex items-center gap-2">
+                                    <Repeat className="w-4 h-4 text-blue-600" />
+                                    Repeat Rate
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-4xl font-black text-slate-900 leading-none">
+                                    {retentionData.metrics.repeat_rate.toFixed(1)}<span className="text-xl">%</span>
+                                </div>
+                                <p className="mt-4 text-slate-500 text-xs font-medium">
+                                    リピート顧客: {retentionData.metrics.repeat_customers.toLocaleString()}人
+                                </p>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-3xl overflow-hidden bg-purple-50">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-xs uppercase font-black text-purple-700/60 tracking-widest flex items-center gap-2">
+                                    <TrendingUp className="w-4 h-4 text-purple-600" />
+                                    Avg LTV
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-4xl font-black text-slate-900 leading-none">
+                                    ¥{Math.floor(retentionData.metrics.average_ltv).toLocaleString()}
+                                </div>
+                                <p className="mt-4 text-slate-500 text-xs font-medium">平均顧客生涯価値</p>
+                            </CardContent>
+                        </Card>
+
+                        <Card className="border-none shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-3xl overflow-hidden bg-amber-50">
+                            <CardHeader className="pb-2">
+                                <CardTitle className="text-xs uppercase font-black text-amber-700/60 tracking-widest flex items-center gap-2">
+                                    <CreditCard className="w-4 h-4 text-amber-600" />
+                                    Total Revenue
+                                </CardTitle>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="text-4xl font-black text-slate-900 leading-none">
+                                    ¥{retentionData.metrics.total_revenue.toLocaleString()}
+                                </div>
+                                <p className="mt-4 text-slate-500 text-xs font-medium">累計売上</p>
+                            </CardContent>
+                        </Card>
+                    </div>
+
+                    {/* Retention Trend Chart */}
+                    <Card className="border border-slate-100 shadow-sm rounded-3xl overflow-hidden">
+                        <CardHeader className="p-8 border-b border-slate-50">
+                            <CardTitle className="text-xl font-black tracking-tight">リテンション率推移</CardTitle>
+                            <CardDescription className="font-medium text-slate-500 mt-1">
+                                月別の顧客リピート率の推移
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent className="p-8 h-[400px]">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <LineChart data={retentionData.charts.retention}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                                    <XAxis 
+                                        dataKey="month" 
+                                        axisLine={false} 
+                                        tickLine={false} 
+                                        tick={{ fontSize: 10, fontWeight: 700 }}
+                                        tickFormatter={(value) => format(new Date(value + '-01'), 'M月', { locale: ja })}
+                                    />
+                                    <YAxis 
+                                        axisLine={false} 
+                                        tickLine={false} 
+                                        tick={{ fontSize: 10, fontWeight: 700 }}
+                                        domain={[0, 100]}
+                                        tickFormatter={(value) => `${value}%`}
+                                    />
+                                    <Tooltip
+                                        contentStyle={{ borderRadius: '16px', border: 'none', boxShadow: '0 10px 15px -3px rgb(0 0 0 / 0.1)', fontWeight: 'bold' }}
+                                        formatter={(value) => `${Number(value).toFixed(1)}%`}
+                                        labelFormatter={(label) => format(new Date(label + '-01'), 'yyyy年M月', { locale: ja })}
+                                    />
+                                    <Line 
+                                        type="monotone" 
+                                        dataKey="rate" 
+                                        stroke="#10B981" 
+                                        strokeWidth={3}
+                                        dot={{ fill: '#10B981', r: 6 }}
+                                        activeDot={{ r: 8 }}
+                                    />
+                                </LineChart>
+                            </ResponsiveContainer>
+                        </CardContent>
+                    </Card>
+                </div>
+            )}
         </div>
     );
 }

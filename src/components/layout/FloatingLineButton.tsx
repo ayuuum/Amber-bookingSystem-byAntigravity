@@ -1,5 +1,6 @@
 "use client";
 
+import { usePathname } from "next/navigation";
 import { MessageCircle } from "lucide-react";
 
 interface FloatingLineButtonProps {
@@ -9,6 +10,15 @@ interface FloatingLineButtonProps {
 export function FloatingLineButton({
     lineUrl = "https://line.me/R/ti/p/"
 }: FloatingLineButtonProps) {
+    const pathname = usePathname();
+    
+    // 管理画面、ログインページ、サインアップページでは表示しない
+    if (pathname?.startsWith('/admin') || 
+        pathname === '/login' || 
+        pathname === '/signup') {
+        return null;
+    }
+    
     return (
         <a
             href={lineUrl}

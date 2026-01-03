@@ -5,23 +5,25 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { Label } from "@/components/ui/label";
 import { Card, CardContent } from "@/components/ui/card";
-import { Profile } from '@/types';
+import { Staff } from '@/types';
 
 interface StaffSelectionProps {
     form: UseFormReturn<BookingFormData>;
-    storeId: string; // To fetch staff for this store
+    storeId: string; // storeSlug or storeId
+    initialStaff?: Staff[];
 }
 
-export function StaffSelection({ form, storeId }: StaffSelectionProps) {
-    const [staffList, setStaffList] = useState<Profile[]>([]);
-    const [loading, setLoading] = useState(false);
+export function StaffSelection({ form, storeId, initialStaff }: StaffSelectionProps) {
+    const [staffList, setStaffList] = useState<Staff[]>(initialStaff || []);
+    const [loading, setLoading] = useState(!initialStaff);
     const selectedStaffId = form.watch("staffId");
 
     useEffect(() => {
-        // Fetch staff for the store
-        // This assumes an API endpoint exists, e.g., /api/stores/[id]/staff
-        // For now, we'll mock or assume we can fetch them. 
-        // Ideally we should have a prop or fetch here.
+        if (initialStaff) {
+            setStaffList(initialStaff);
+            setLoading(false);
+            return;
+        }
         const fetchStaff = async () => {
             setLoading(true);
             try {
@@ -38,7 +40,7 @@ export function StaffSelection({ form, storeId }: StaffSelectionProps) {
         };
 
         if (storeId) fetchStaff();
-    }, [storeId]);
+    }, [storeId, initialStaff]);
 
     return (
         <div className="space-y-4">
@@ -52,7 +54,8 @@ export function StaffSelection({ form, storeId }: StaffSelectionProps) {
                     <RadioGroupItem value="none" id="staff-none" className="peer sr-only" />
                     <Label
                         htmlFor="staff-none"
-                        className="flex items-center space-x-3 border rounded-lg p-4 cursor-pointer hover:bg-accent peer-data-[state=checked]:border-primary peer-data-[state=checked]:ring-1 peer-data-[state=checked]:ring-primary"
+                        className={`flex items-center space-x-3 border rounded-lg p-4 cursor-pointer hover:bg-accent transition-all ${selectedStaffId === "none" || !selectedStaffId ? 'shadow-sm' : ''}`}
+                        style={(selectedStaffId === "none" || !selectedStaffId) ? { borderColor: 'var(--primary-color)', boxShadow: '0 0 0 1px var(--primary-color)' } : {}}
                     >
                         <Avatar>
                             <AvatarFallback>なし</AvatarFallback>
@@ -66,15 +69,17 @@ export function StaffSelection({ form, storeId }: StaffSelectionProps) {
                         <RadioGroupItem value={staff.id} id={`staff-${staff.id}`} className="peer sr-only" />
                         <Label
                             htmlFor={`staff-${staff.id}`}
-                            className="flex items-center space-x-3 border rounded-lg p-4 cursor-pointer hover:bg-accent peer-data-[state=checked]:border-primary peer-data-[state=checked]:ring-1 peer-data-[state=checked]:ring-primary"
+                            className={`flex items-center space-x-3 border rounded-lg p-4 cursor-pointer hover:bg-accent transition-all ${selectedStaffId === staff.id ? 'shadow-sm' : ''}`}
+                            style={selectedStaffId === staff.id ? { borderColor: 'var(--primary-color)', boxShadow: '0 0 0 1px var(--primary-color)' } : {}}
                         >
                             <Avatar>
-                                <AvatarImage src={staff.avatar_url || ""} />
-                                <AvatarFallback>{staff.full_name?.charAt(0) || 'S'}</AvatarFallback>
+                                <AvatarFallback>{staff.name?.charAt(0) || 'S'}</AvatarFallback>
                             </Avatar>
                             <div className="flex flex-col">
-                                <span className="font-medium">{staff.full_name}</span>
-                                {/* <span className="text-xs text-muted-foreground">Expert</span> */}
+                                <span className="font-medium text-foreground">{staff.name}</span>
+                                {staff.nomination_fee && staff.nomination_fee > 0 && (
+                                    <span className="text-xs text-muted-foreground">指名料: ¥{staff.nomination_fee.toLocaleString()}</span>
+                                )}
                             </div>
                         </Label>
                     </div>

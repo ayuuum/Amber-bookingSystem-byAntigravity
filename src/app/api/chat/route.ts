@@ -8,7 +8,7 @@ import { z } from 'zod';
 export const maxDuration = 30;
 
 export async function POST(req: Request) {
-    const { messages } = await req.json();
+    const { messages, storeSlug, cartItems } = await req.json();
     const supabase = await createClient();
 
     // Fallback if no API key is set
@@ -21,15 +21,65 @@ export async function POST(req: Request) {
         }), { status: 200 }); // Or handle gracefully as stream
     }
 
+    // ストア情報とサービス情報を取得
+    let storeId: string | null = null;
+    let organizationId: string | null = null;
+    let allServices: any[] = [];
+    let currentCartServices: any[] = [];
+
+    if (storeSlug) {
+        const { data: storeData } = await supabase
+            .from('stores')
+            .select('id, organization_id')
+            .eq('slug', storeSlug)
+            .single();
+        
+        if (storeData) {
+            storeId = storeData.id;
+            organizationId = storeData.organization_id;
+            
+            // 全サービスを取得（詳細情報含む）
+            const { data: services } = await supabase
+                .from('services')
+                .select('id, title, description, price, duration_minutes, category')
+                .eq('store_id', storeId)
+                .eq('is_active', true)
+                .order('price', { ascending: true });
+            
+            allServices = services || [];
+
+            // カート内のサービス情報を取得
+            if (cartItems && cartItems.length > 0) {
+                const cartServiceIds = cartItems.map((item: any) => item.serviceId);
+                currentCartServices = allServices.filter(s => cartServiceIds.includes(s.id));
+            }
+        }
+    }
+
+    // カート内容をテキスト形式で生成
+    const cartSummary = currentCartServices.length > 0
+        ? `現在カートに入っているサービス: ${currentCartServices.map(s => s.title).join('、')}`
+        : '現在カートは空です。';
+
     const result = await streamText({
         model: google('models/gemini-1.5-pro-latest') as any,
-        system: `あなたは「Haukuri Pro（ハウクリプロ）」の予約受付AIアシスタントです。
+        system: `あなたは「Amber House（アンバーハウス）」の予約受付AIアシスタントです。
         以下の指示に従ってください：
         1. 丁寧で親しみやすい口調で話してください（例：「ございます」「ですね」）。
         2. 料金やサービスに関する質問には \`getServices\` ツールを使って正確に答えてください。
         3. 空き状況の確認には \`checkAvailability\` ツールを使ってください。
         4. 予約を希望された場合は、必要な情報（名前、電話番号、希望日時、メニュー）を聞き出し、全て揃ったら \`createBooking\` ツールを実行してください。
         5. 予約完了後は「予約を受け付けました。ご来店をお待ちしております」と伝えてください。
+        
+        【アップセル・クロスセル戦略】
+        ${cartSummary}
+        
+        会話の中で自然に以下の戦略でサービスを提案してください：
+        - **アップセル**: 現在のカート内容より高価なサービスや、より高品質なプランを提案
+        - **クロスセル**: 現在のカート内容と関連する別カテゴリのサービスを提案（例：エアコン掃除→キッチン掃除）
+        - **セットプラン**: 複数のサービスを組み合わせたお得なセットプランを提案
+        
+        提案する際は、\`suggestServices\` ツールを使用してください。提案理由も含めて自然な会話の中で紹介してください。
         `,
         // removed maxSteps to avoid type error if version mismatch
         messages,
@@ -38,8 +88,8 @@ export async function POST(req: Request) {
                 description: '提供している掃除サービスのリストと料金を取得します',
                 parameters: z.object({}),
                 execute: async () => {
-                    const { data } = await supabase.from('services').select('title, price, duration_minutes');
-                    return data?.map(s => `${s.title}: ${s.price}円 (${s.duration_minutes}分)`) || [];
+                    if (!storeId) return '店舗情報が見つかりませんでした。';
+                    return allServices.map(s => `${s.title}: ${s.price}円 (${s.duration_minutes}分)${s.description ? ` - ${s.description}` : ''}`) || [];
                 },
             }),
             checkAvailability: tool({
@@ -81,15 +131,32 @@ export async function POST(req: Request) {
 
                     if (!service) return 'サービスが見つかりませんでした。正確なメニュー名を教えてください。';
 
+                    if (!storeId || !organizationId) {
+                        return '店舗情報が正しく取得できませんでした。';
+                    }
+
                     let customerId;
-                    const { data: existingCustomer } = await supabase.from('customers').select('id').eq('phone', customerPhone).single();
+                    // 既存顧客を検索（store_idでスコープ）
+                    const { data: existingCustomer } = await supabase
+                        .from('customers')
+                        .select('id')
+                        .eq('phone', customerPhone)
+                        .eq('store_id', storeId)
+                        .single();
+                    
                     if (existingCustomer) {
                         customerId = existingCustomer.id;
                     } else {
-                        const { data: newCustomer, error: cError } = await supabase.from('customers').insert({
-                            full_name: customerName,
-                            phone: customerPhone
-                        }).select().single();
+                        // 新規顧客作成（store_idを設定）
+                        const { data: newCustomer, error: cError } = await supabase
+                            .from('customers')
+                            .insert({
+                                full_name: customerName,
+                                phone: customerPhone,
+                                store_id: storeId
+                            })
+                            .select()
+                            .single();
                         if (cError) return '顧客情報の登録に失敗しました。';
                         customerId = newCustomer.id;
                     }
@@ -97,13 +164,20 @@ export async function POST(req: Request) {
                     const startDateTime = new Date(`${date}T${time}`);
                     const endDateTime = new Date(startDateTime.getTime() + service.duration_minutes * 60000);
 
-                    const { data: booking, error: bError } = await supabase.from('bookings').insert({
-                        customer_id: customerId,
-                        start_time: startDateTime.toISOString(),
-                        end_time: endDateTime.toISOString(),
-                        status: 'pending',
-                        total_amount: service.price,
-                    }).select().single();
+                    // 予約作成（store_idとorganization_idを設定）
+                    const { data: booking, error: bError } = await supabase
+                        .from('bookings')
+                        .insert({
+                            customer_id: customerId,
+                            store_id: storeId,
+                            organization_id: organizationId,
+                            start_time: startDateTime.toISOString(),
+                            end_time: endDateTime.toISOString(),
+                            status: 'pending',
+                            total_amount: service.price,
+                        })
+                        .select()
+                        .single();
 
                     if (bError) return '予約作成に失敗しました。';
 
@@ -116,6 +190,39 @@ export async function POST(req: Request) {
                     });
 
                     return `予約を受け付けました (ID: ${booking.id}) 。担当者からの連絡をお待ちください。`;
+                },
+            }),
+            suggestServices: tool({
+                description: 'ユーザーにサービスを提案します。アップセル、クロスセル、セットプランの提案に使用します。',
+                parameters: z.object({
+                    serviceIds: z.array(z.string()).describe('提案するサービスのID配列'),
+                    suggestionType: z.enum(['upsell', 'cross_sell', 'combo']).describe('提案タイプ: upsell=より高価なサービス, cross_sell=関連サービス, combo=セットプラン'),
+                    reason: z.string().optional().describe('提案理由（自然な日本語で）'),
+                }),
+                execute: async (args) => {
+                    const { serviceIds, suggestionType, reason } = args;
+                    
+                    if (!storeId) return '店舗情報が見つかりませんでした。';
+                    
+                    const suggestedServices = allServices.filter(s => serviceIds.includes(s.id));
+                    
+                    if (suggestedServices.length === 0) {
+                        return '提案するサービスが見つかりませんでした。';
+                    }
+
+                    // JSON形式でサービス提案を返す（AIがこれを解析して表示する）
+                    return JSON.stringify({
+                        type: 'service_suggestion',
+                        services: suggestedServices.map(s => ({
+                            id: s.id,
+                            title: s.title,
+                            price: s.price,
+                            description: s.description || '',
+                            duration_minutes: s.duration_minutes,
+                            reason: reason || `${s.title}はいかがでしょうか？`
+                        })),
+                        suggestion_type: suggestionType
+                    });
                 },
             }),
         },

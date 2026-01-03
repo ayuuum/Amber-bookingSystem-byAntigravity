@@ -5,20 +5,65 @@ import { Card, CardContent, CardFooter, CardHeader, CardTitle } from '@/componen
 import { Input } from '@/components/ui/input';
 import { MessageCircle, X, Send, Bot, User } from 'lucide-react';
 import { useState, useRef, useEffect } from 'react';
+import { usePathname, useParams } from 'next/navigation';
 import { cn } from '@/lib/utils';
+import { useCart } from '@/contexts/CartContext';
+import { ServiceSuggestionCard, ServiceSuggestionGroup } from './ServiceSuggestionCard';
 
 type Message = {
     id: string;
     role: 'user' | 'assistant' | 'system';
     content: string;
+    suggestions?: {
+        type: 'service_suggestion';
+        services: Array<{
+            id: string;
+            title: string;
+            price: number;
+            description?: string;
+            duration_minutes?: number;
+            reason?: string;
+        }>;
+        suggestion_type: 'upsell' | 'cross_sell' | 'combo';
+    };
 };
 
 export function ChatWidget() {
+    const pathname = usePathname();
+    const params = useParams();
+    const { cart, storeSlug: contextStoreSlug, setStoreSlug } = useCart();
+    
+    // 管理画面では表示しない
+    if (pathname?.startsWith('/admin')) {
+        return null;
+    }
+
+    // storeSlugを取得（URLパラメータまたはコンテキストから）
+    const getStoreSlug = (): string | null => {
+        // URLパラメータから取得を試みる
+        if (params?.store_slug && typeof params.store_slug === 'string') {
+            return params.store_slug;
+        }
+        if (params?.slug && typeof params.slug === 'string') {
+            return params.slug;
+        }
+        // コンテキストから取得
+        return contextStoreSlug;
+    };
+
     const [isOpen, setIsOpen] = useState(false);
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const scrollRef = useRef<HTMLDivElement>(null);
+
+    // storeSlugをコンテキストに設定
+    useEffect(() => {
+        const slug = getStoreSlug();
+        if (slug && slug !== contextStoreSlug) {
+            setStoreSlug(slug);
+        }
+    }, [pathname, params, contextStoreSlug, setStoreSlug]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -35,11 +80,14 @@ export function ChatWidget() {
         setIsLoading(true);
 
         try {
+            const currentStoreSlug = getStoreSlug();
             const response = await fetch('/api/chat', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
-                    messages: [...messages, userMessage]
+                    messages: [...messages, userMessage],
+                    storeSlug: currentStoreSlug,
+                    cartItems: cart
                 })
             });
 
@@ -94,6 +142,30 @@ export function ChatWidget() {
                                 // ignore parse error (maybe incomplete line)
                             }
                         }
+                        // ツール呼び出し結果をチェック（サービス提案の場合）
+                        if (line.startsWith('2:')) {
+                            try {
+                                const toolResult = JSON.parse(line.slice(2).trim());
+                                if (toolResult && typeof toolResult === 'string') {
+                                    // suggestServicesツールの結果をパース
+                                    try {
+                                        const parsed = JSON.parse(toolResult);
+                                        if (parsed.type === 'service_suggestion') {
+                                            // メッセージにサービス提案を追加
+                                            setMessages(prev => prev.map(m =>
+                                                m.id === assistantMessage.id
+                                                    ? { ...m, suggestions: parsed }
+                                                    : m
+                                            ));
+                                        }
+                                    } catch (e) {
+                                        // JSONパース失敗は無視
+                                    }
+                                }
+                            } catch (e) {
+                                // ignore parse error
+                            }
+                        }
                     }
 
                     setMessages(prev => prev.map(m =>
@@ -121,7 +193,7 @@ export function ChatWidget() {
     }, [messages]);
 
     return (
-        <div className="fixed bottom-4 right-4 z-50 flex flex-col items-end space-y-4">
+        <div className="fixed bottom-20 right-4 md:bottom-4 md:right-auto md:left-4 z-[60] flex flex-col items-end space-y-4">
             {isOpen && (
                 <Card className="w-[350px] h-[500px] shadow-xl flex flex-col animate-in slide-in-from-bottom-5 fade-in duration-300">
                     <CardHeader className="p-4 flex flex-row justify-between items-center border-b">
@@ -166,15 +238,27 @@ export function ChatWidget() {
                                         >
                                             {m.role === 'user' ? <User className="h-4 w-4" /> : <Bot className="h-4 w-4" />}
                                         </div>
-                                        <div
-                                            className={cn(
-                                                "rounded-lg px-3 py-2 text-sm max-w-[80%]",
-                                                m.role === 'user'
-                                                    ? "bg-primary text-primary-foreground"
-                                                    : "bg-muted text-foreground"
+                                        <div className="flex-1 space-y-2">
+                                            {m.content && (
+                                                <div
+                                                    className={cn(
+                                                        "rounded-lg px-3 py-2 text-sm max-w-[80%]",
+                                                        m.role === 'user'
+                                                            ? "bg-primary text-primary-foreground"
+                                                            : "bg-muted text-foreground"
+                                                    )}
+                                                >
+                                                    {m.content}
+                                                </div>
                                             )}
-                                        >
-                                            {m.content}
+                                            {m.suggestions && m.suggestions.type === 'service_suggestion' && (
+                                                <div className="mt-2 space-y-2">
+                                                    <ServiceSuggestionGroup
+                                                        services={m.suggestions.services}
+                                                        suggestionType={m.suggestions.suggestion_type}
+                                                    />
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 ))}

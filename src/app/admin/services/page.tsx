@@ -14,6 +14,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "@/components/ui/dialog";
+import { useToast } from '@/hooks/use-toast';
 import { PlusCircle, Pencil, Trash2, Clock, JapaneseYen } from 'lucide-react';
 
 export type Option = {
@@ -36,12 +37,18 @@ export default function AdminServicesPage() {
     const [loading, setLoading] = useState(true);
     const [isDialogOpen, setIsDialogOpen] = useState(false);
     const [editingService, setEditingService] = useState<Service | null>(null);
-    const [formData, setFormData] = useState({ title: '', duration_minutes: 60, price: 10000 });
+    const [formData, setFormData] = useState<{ title: string; duration_minutes: number | string; price: number | string }>({ 
+        title: '', 
+        duration_minutes: 60, 
+        price: 10000 
+    });
+    const [errors, setErrors] = useState<{ title?: string; duration_minutes?: string; price?: string }>({});
 
     // Option Form State
     const [newOption, setNewOption] = useState({ name: '', price: 0, duration_minutes: 0 });
 
     const supabase = createClient();
+    const { toast } = useToast();
 
     const fetchServices = useCallback(async () => {
         const { data } = await fetch('/api/services').then(res => res.json());
@@ -66,49 +73,128 @@ export default function AdminServicesPage() {
             setEditingService(null);
             setFormData({ title: '', duration_minutes: 60, price: 10000 });
         }
+        setErrors({}); // Reset errors
         setNewOption({ name: '', price: 3000, duration_minutes: 15 }); // Reset option form
         setIsDialogOpen(true);
     };
 
+    const validateForm = (): boolean => {
+        const newErrors: { title?: string; duration_minutes?: string; price?: string } = {};
+        
+        if (!formData.title || formData.title.trim() === '') {
+            newErrors.title = 'サービス名は必須です';
+        }
+        
+        const durationNum = Number(formData.duration_minutes);
+        if (!formData.duration_minutes || isNaN(durationNum) || durationNum <= 0) {
+            newErrors.duration_minutes = '所要時間は必須です（1分以上）';
+        }
+        
+        const priceNum = Number(formData.price);
+        if (!formData.price || isNaN(priceNum) || priceNum < 0) {
+            newErrors.price = '料金は必須です（0円以上）';
+        }
+        
+        setErrors(newErrors);
+        return Object.keys(newErrors).length === 0;
+    };
+
     const handleSave = async () => {
-        if (!formData.title) return;
+        // バリデーション
+        if (!validateForm()) {
+            return;
+        }
 
         // Get Store ID (MVP)
         const { data: store } = await supabase.from('stores').select('id').limit(1).single();
         if (!store) {
-            alert('店舗情報が見つかりません');
+            toast({
+                variant: 'destructive',
+                title: 'エラー',
+                description: '店舗情報が見つかりません',
+            });
+            return;
+        }
+
+        // 数値変換とNaNチェック
+        const durationNum = Number(formData.duration_minutes);
+        const priceNum = Number(formData.price);
+        
+        if (isNaN(durationNum) || isNaN(priceNum)) {
+            toast({
+                variant: 'destructive',
+                title: '入力エラー',
+                description: '所要時間と料金は数値で入力してください',
+            });
             return;
         }
 
         const payload = {
             id: editingService?.id,
             store_id: store.id,
-            title: formData.title,
-            duration_minutes: formData.duration_minutes,
-            price: formData.price
+            title: formData.title.trim(),
+            duration_minutes: durationNum,
+            price: priceNum
         };
 
-        const res = await fetch('/api/services', {
-            method: 'POST',
-            body: JSON.stringify(payload)
-        });
+        try {
+            const res = await fetch('/api/services', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(payload)
+            });
 
-        if (res.ok) {
-            setIsDialogOpen(false);
-            setLoading(true);
-            fetchServices();
-        } else {
-            console.error("Failed to save service");
+            const data = await res.json();
+
+            if (res.ok) {
+                setIsDialogOpen(false);
+                setErrors({});
+                setLoading(true);
+                fetchServices();
+                toast({
+                    variant: 'default',
+                    title: '保存完了',
+                    description: editingService ? 'サービスを更新しました' : 'サービスを追加しました',
+                });
+            } else {
+                // APIエラーレスポンスを適切に表示
+                const errorMessage = data.error?.message || 'サービスの保存に失敗しました';
+                console.error("Failed to save service:", data);
+                toast({
+                    variant: 'destructive',
+                    title: '保存失敗',
+                    description: errorMessage,
+                });
+            }
+        } catch (error: any) {
+            console.error("Unexpected error saving service:", error);
+            toast({
+                variant: 'destructive',
+                title: 'エラー',
+                description: 'ネットワークエラーが発生しました。しばらく時間をおいて再試行してください。',
+            });
         }
     };
 
     const handleDelete = async (id: string) => {
         if (!confirm('本当に削除しますか？')) return;
         const { error } = await supabase.from('services').delete().eq('id', id);
-        if (error) alert('削除できませんでした。予約で使用されている可能性があります。');
-        else {
+        if (error) {
+            toast({
+                variant: 'destructive',
+                title: '削除失敗',
+                description: '削除できませんでした。予約で使用されている可能性があります。',
+            });
+        } else {
             setLoading(true);
             fetchServices();
+            toast({
+                variant: 'success',
+                title: '削除完了',
+                description: 'サービスを削除しました',
+            });
         }
     };
 
@@ -138,17 +224,41 @@ export default function AdminServicesPage() {
             if (updatedService) setEditingService(updatedService);
 
             setNewOption({ name: '', price: 3000, duration_minutes: 15 });
+            toast({
+                variant: 'success',
+                title: '追加完了',
+                description: 'オプションを追加しました',
+            });
+        } else {
+            toast({
+                variant: 'destructive',
+                title: '追加失敗',
+                description: 'オプションの追加に失敗しました',
+            });
         }
     };
 
     const handleDeleteOption = async (optionId: string) => {
         if (!confirm('オプションを削除しますか？')) return;
-        await fetch(`/api/services/options?id=${optionId}`, { method: 'DELETE' });
+        const res = await fetch(`/api/services/options?id=${optionId}`, { method: 'DELETE' });
 
-        const updatedList = await fetch('/api/services').then(r => r.json());
-        setServices(updatedList);
-        const updatedService = updatedList.find((s: Service) => s.id === editingService!.id);
-        if (updatedService) setEditingService(updatedService);
+        if (res.ok) {
+            const updatedList = await fetch('/api/services').then(r => r.json());
+            setServices(updatedList);
+            const updatedService = updatedList.find((s: Service) => s.id === editingService!.id);
+            if (updatedService) setEditingService(updatedService);
+            toast({
+                variant: 'success',
+                title: '削除完了',
+                description: 'オプションを削除しました',
+            });
+        } else {
+            toast({
+                variant: 'destructive',
+                title: '削除失敗',
+                description: 'オプションの削除に失敗しました',
+            });
+        }
     };
 
     if (loading) return <div className="p-8">Loading...</div>;
@@ -210,34 +320,78 @@ export default function AdminServicesPage() {
 
                     {/* Basic Info */}
                     <div className="grid gap-4 py-4 border-b">
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label className="text-right">サービス名</Label>
-                            <Input
-                                value={formData.title}
-                                onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-                                className="col-span-3"
-                                placeholder="エアコンクリーニング"
-                            />
+                        <div className="grid grid-cols-4 items-start gap-4">
+                            <Label className="text-right pt-2">サービス名 <span className="text-red-500">*</span></Label>
+                            <div className="col-span-3">
+                                <Input
+                                    value={formData.title}
+                                    onChange={(e) => {
+                                        setFormData({ ...formData, title: e.target.value });
+                                        if (errors.title) setErrors({ ...errors, title: undefined });
+                                    }}
+                                    className={errors.title ? 'border-red-500' : ''}
+                                    placeholder="エアコンクリーニング"
+                                />
+                                {errors.title && (
+                                    <p className="text-sm text-red-500 mt-1">{errors.title}</p>
+                                )}
+                            </div>
                         </div>
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label className="text-right">所要時間 (分)</Label>
-                            <Input
-                                type="number"
-                                value={formData.duration_minutes}
-                                onChange={(e) => setFormData({ ...formData, duration_minutes: Number(e.target.value) })}
-                                className="col-span-3"
-                            />
+                        <div className="grid grid-cols-4 items-start gap-4">
+                            <Label className="text-right pt-2">所要時間 (分) <span className="text-red-500">*</span></Label>
+                            <div className="col-span-3">
+                                <Input
+                                    type="number"
+                                    min="1"
+                                    value={formData.duration_minutes || ''}
+                                    onChange={(e) => {
+                                        const value = e.target.value === '' ? '' : Number(e.target.value);
+                                        setFormData({ ...formData, duration_minutes: value as number });
+                                        if (errors.duration_minutes) setErrors({ ...errors, duration_minutes: undefined });
+                                    }}
+                                    className={errors.duration_minutes ? 'border-red-500' : ''}
+                                    placeholder="60"
+                                />
+                                {errors.duration_minutes && (
+                                    <p className="text-sm text-red-500 mt-1">{errors.duration_minutes}</p>
+                                )}
+                            </div>
                         </div>
-                        <div className="grid grid-cols-4 items-center gap-4">
-                            <Label className="text-right">料金 (円)</Label>
-                            <Input
-                                type="number"
-                                value={formData.price}
-                                onChange={(e) => setFormData({ ...formData, price: Number(e.target.value) })}
-                                className="col-span-3"
-                            />
+                        <div className="grid grid-cols-4 items-start gap-4">
+                            <Label className="text-right pt-2">料金 (円) <span className="text-red-500">*</span></Label>
+                            <div className="col-span-3">
+                                <Input
+                                    type="number"
+                                    min="0"
+                                    value={formData.price || ''}
+                                    onChange={(e) => {
+                                        const value = e.target.value === '' ? '' : Number(e.target.value);
+                                        setFormData({ ...formData, price: value as number });
+                                        if (errors.price) setErrors({ ...errors, price: undefined });
+                                    }}
+                                    className={errors.price ? 'border-red-500' : ''}
+                                    placeholder="10000"
+                                />
+                                {errors.price && (
+                                    <p className="text-sm text-red-500 mt-1">{errors.price}</p>
+                                )}
+                            </div>
                         </div>
-                        <Button onClick={handleSave} className="w-full mt-2">基本情報を保存</Button>
+                        <Button 
+                            onClick={handleSave} 
+                            className="w-full mt-2"
+                            disabled={
+                                !formData.title || 
+                                !formData.duration_minutes || 
+                                isNaN(Number(formData.duration_minutes)) || 
+                                Number(formData.duration_minutes) <= 0 ||
+                                !formData.price || 
+                                isNaN(Number(formData.price)) || 
+                                Number(formData.price) < 0
+                            }
+                        >
+                            基本情報を保存
+                        </Button>
                     </div>
 
                     {/* Options Management (Only if editing) */}

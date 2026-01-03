@@ -1,35 +1,49 @@
 import { useEffect, useState } from "react";
 import { Service, CartItem } from "@/types/cart";
 import { ServiceCartItem } from "./ServiceCartItem";
-import { Loader2 } from "lucide-react";
+import { LoadingState } from "@/components/ui/loading";
+import { EmptyState } from "@/components/ui/empty-state";
 
 interface ServiceCartProps {
     slug: string;
     cart: CartItem[];
     onUpdateCart: (cart: CartItem[]) => void;
+    initialServices?: Service[];
     error?: string;
 }
 
-export function ServiceCart({ slug, cart, onUpdateCart, error }: ServiceCartProps) {
-    const [services, setServices] = useState<Service[]>([]);
-    const [loading, setLoading] = useState(true);
+export function ServiceCart({ slug, cart, onUpdateCart, initialServices, error }: ServiceCartProps) {
+    const [services, setServices] = useState<Service[]>(initialServices || []);
+    const [loading, setLoading] = useState(!initialServices);
 
     useEffect(() => {
+        if (initialServices) {
+            setServices(initialServices);
+            setLoading(false);
+            return;
+        }
+
         const fetchServices = async () => {
             try {
-                // Assuming slug can resolve services. If we have storeId, utilize that.
-                // The API needs to handle storeSlug or storeId.
+                setLoading(true);
                 const res = await fetch(`/api/services?slug=${slug}`);
                 if (res.ok) {
                     const data = await res.json();
-                    const formattedData = data.map((s: any) => ({
-                        ...s,
-                        options: s.options?.map((o: any) => ({
-                            ...o,
-                            durationMinutes: o.duration_minutes || 0
-                        })) || []
-                    }));
+                    // Filter only active services and format data
+                    const formattedData = data
+                        .filter((s: any) => s.is_active !== false) // Only show active services
+                        .map((s: any) => ({
+                            ...s,
+                            options: s.options?.map((o: any) => ({
+                                ...o,
+                                durationMinutes: o.duration_minutes || 0
+                            })) || []
+                        }));
                     setServices(formattedData);
+                } else {
+                    console.error("Failed to fetch services:", res.status, res.statusText);
+                    const errorData = await res.json().catch(() => ({}));
+                    console.error("Error details:", errorData);
                 }
             } catch (error) {
                 console.error("Failed to fetch services", error);
@@ -37,7 +51,11 @@ export function ServiceCart({ slug, cart, onUpdateCart, error }: ServiceCartProp
                 setLoading(false);
             }
         };
-        fetchServices();
+        if (slug) {
+            fetchServices();
+        } else {
+            setLoading(false);
+        }
     }, [slug]);
 
     const handleUpdateCart = (updatedItem: CartItem) => {
@@ -69,16 +87,32 @@ export function ServiceCart({ slug, cart, onUpdateCart, error }: ServiceCartProp
         return sum + (item.quantity * (itemPrice + optionsCost));
     }, 0);
 
-    if (loading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin text-gray-400" /></div>;
+    if (loading) {
+        return <LoadingState message="メニューを読み込み中..." />;
+    }
+
+    if (services.length === 0) {
+        return (
+            <div className="space-y-6">
+                <div className="flex justify-between items-center">
+                    <h2 className="text-xl font-semibold text-foreground">メニュー選択</h2>
+                </div>
+                <EmptyState
+                    title="予約可能なメニューがありません"
+                    description="現在、予約可能なメニューがありません。管理者にお問い合わせください。"
+                />
+            </div>
+        );
+    }
 
     return (
         <div className="space-y-6">
             <div className="flex justify-between items-center">
-                <h2 className="text-xl font-semibold">メニュー選択</h2>
+                <h2 className="text-xl font-semibold text-foreground">メニュー選択</h2>
                 {totalAmount > 0 && (
                     <div className="text-right">
-                        <span className="text-sm text-gray-500 mr-2">合計</span>
-                        <span className="text-xl font-bold text-red-600">¥{totalAmount.toLocaleString()}</span>
+                        <span className="text-sm text-muted-foreground mr-2">合計</span>
+                        <span className="text-xl font-bold text-foreground">¥{totalAmount.toLocaleString()}</span>
                     </div>
                 )}
             </div>

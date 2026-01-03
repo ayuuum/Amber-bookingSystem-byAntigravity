@@ -20,45 +20,63 @@ export function CustomerInfo({ form }: CustomerInfoProps) {
             </div>
 
             <div className="space-y-4">
-                <div className="space-y-2">
-                    <Label htmlFor="customerName">お名前 <span className="text-red-500">*</span></Label>
-                    <Input
-                        id="customerName"
-                        placeholder="山田 太郎"
-                        {...register("customerName", { required: "お名前は必須です" })}
-                    />
-                    {errors.customerName && <p className="text-destructive text-sm">{errors.customerName.message}</p>}
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="space-y-2">
+                        <Label htmlFor="lastName">姓 <span className="text-red-500">*</span></Label>
+                        <Input
+                            id="lastName"
+                            placeholder="山田"
+                            {...register("lastName", { required: "姓は必須です" })}
+                        />
+                        {errors.lastName && <p className="text-destructive text-sm">{errors.lastName.message}</p>}
+                    </div>
+                    <div className="space-y-2">
+                        <Label htmlFor="firstName">名 <span className="text-red-500">*</span></Label>
+                        <Input
+                            id="firstName"
+                            placeholder="太郎"
+                            {...register("firstName", { required: "名は必須です" })}
+                        />
+                        {errors.firstName && <p className="text-destructive text-sm">{errors.firstName.message}</p>}
+                    </div>
                 </div>
 
                 <div className="space-y-2">
-                    <Label htmlFor="customerPhone">電話番号 <span className="text-red-500">*</span></Label>
+                    <Label htmlFor="phone">電話番号 <span className="text-red-500">*</span></Label>
                     <Input
-                        id="customerPhone"
+                        id="phone"
                         type="tel"
-                        placeholder="090-1234-5678"
-                        {...register("customerPhone", { required: "電話番号は必須です" })}
+                        placeholder="09012345678"
+                        {...register("phone", {
+                            required: "電話番号は必須です",
+                            pattern: {
+                                value: /^0[0-9]{9,10}$/,
+                                message: "正しい電話番号を入力してください（ハイフンなし）"
+                            }
+                        })}
                     />
-                    {errors.customerPhone && <p className="text-destructive text-sm">{errors.customerPhone.message}</p>}
+                    {errors.phone && <p className="text-destructive text-sm">{errors.phone.message}</p>}
                 </div>
 
                 <div className="space-y-2">
-                    <Label htmlFor="customerEmail">メールアドレス (任意)</Label>
+                    <Label htmlFor="email">メールアドレス (任意)</Label>
                     <Input
-                        id="customerEmail"
+                        id="email"
                         type="email"
                         placeholder="taro@example.com"
-                        {...register("customerEmail")}
+                        {...register("email")}
                     />
+                    {errors.email && <p className="text-destructive text-sm">{errors.email.message}</p>}
                 </div>
 
                 <div className="space-y-2">
-                    <Label htmlFor="customerAddress">訪問先住所 <span className="text-red-500">*</span></Label>
+                    <Label htmlFor="address">訪問先住所 <span className="text-red-500">*</span></Label>
                     <Input
-                        id="customerAddress"
+                        id="address"
                         placeholder="東京都渋谷区..."
-                        {...register("customerAddress", { required: "住所は必須です" })}
+                        {...register("address", { required: "住所は必須です" })}
                     />
-                    {errors.customerAddress && <p className="text-destructive text-sm">{errors.customerAddress.message}</p>}
+                    {errors.address && <p className="text-destructive text-sm">{errors.address.message}</p>}
                 </div>
             </div>
 

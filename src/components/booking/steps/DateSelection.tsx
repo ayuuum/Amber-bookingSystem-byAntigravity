@@ -5,29 +5,36 @@ import { Calendar } from "@/components/ui/calendar";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Label } from "@/components/ui/label";
 import { format } from "date-fns";
+import { CartItem } from "@/types/cart";
 
 interface DateSelectionProps {
     form: UseFormReturn<BookingFormData>;
+    slug: string;
+    cart: CartItem[];
 }
 
-export function DateSelection({ form }: DateSelectionProps) {
+export function DateSelection({ form, slug, cart }: DateSelectionProps) {
     const date = form.watch("date");
-    const serviceId = form.watch("serviceId");
     const [availableSlots, setAvailableSlots] = useState<string[]>([]);
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
-        if (!date || !serviceId) return;
+        // Check if date is selected AND cart has items
+        if (!date || cart.length === 0) {
+            setAvailableSlots([]);
+            return;
+        }
 
         const fetchAvailability = async () => {
             setLoading(true);
             try {
-                const res = await fetch('/api/availability', {
+                const res = await fetch('/api/availability-v2', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                         date: format(date, 'yyyy-MM-dd'),
-                        serviceId
+                        storeSlug: slug,
+                        cartItems: cart
                     }),
                 });
                 if (res.ok) {
@@ -45,7 +52,7 @@ export function DateSelection({ form }: DateSelectionProps) {
         };
 
         fetchAvailability();
-    }, [date, serviceId]);
+    }, [date, slug, cart]);
 
     return (
         <div className="flex flex-col md:flex-row gap-8">
